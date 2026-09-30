@@ -8,12 +8,6 @@
     "sensor": {
       "power": {
         "default": "mdi:power"
-      },
-      "active_input": {
-        "default": "mdi:video-input-component"
-      },
-      "active_input_name": {
-        "default": "mdi:gamepad-variant"
       }
     },
     "binary_sensor": {

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import copy
 from typing import Any
 
@@ -12,6 +13,7 @@ from pytest_homeassistant_custom_component.test_util.aiohttp import AiohttpClien
 
 from homeassistant.core import HomeAssistant
 
+from custom_components.cruller.api import CrullerClient, CrullerUnsupportedError
 from custom_components.cruller.const import CONF_HOST, DOMAIN, GITHUB_LATEST_RELEASE_URL
 
 pytest_plugins = "pytest_homeassistant_custom_component"
@@ -30,11 +32,6 @@ INFO: dict[str, Any] = {
 
 STATE: dict[str, Any] = {
     "rt4k": {"connected": True, "power": "on"},
-    "svs": {
-        "known": True, "input": 3, "total": 4, "name": "PS2", "id": "svs-bridge-a0f262e000f0",
-        "paired": "svs-bridge-a0f262e000f0", "heard_s": 12, "since_s": 340, "switch_seq": 1,
-        "history": [[3, 340], [1, 900]],
-    },
     "cruller": {"sw_version": "0.4.2", "uptime_s": 3600, "rssi": -52},
 }
 
@@ -43,6 +40,45 @@ STATE: dict[str, Any] = {
 def auto_enable_custom_integrations(enable_custom_integrations):
     """Load custom_components/cruller in every test."""
     yield
+
+
+@pytest.fixture(autouse=True)
+def no_events(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A Cruller without /api/v1/events (0.4.2), unless a test takes the events fixture: polling."""
+
+    async def unsupported(self, types: str = "state"):
+        raise CrullerUnsupportedError("Cruller has no /api/v1/events")
+        yield  # an async generator, like the real one
+
+    monkeypatch.setattr(CrullerClient, "async_events", unsupported)
+
+
+@pytest.fixture
+def events(monkeypatch: pytest.MonkeyPatch) -> asyncio.Queue:
+    """What /api/v1/events pushes: put a dict to send it, an exception to break the socket, None to
+    close it. Each connection reads from the same queue; reconnecting doesn't wait."""
+    queue: asyncio.Queue = asyncio.Queue()
+
+    async def from_queue(self, types: str = "state"):
+        while True:
+            item = await queue.get()
+            if item is None:
+                return
+            if isinstance(item, Exception):
+                raise item
+            yield item
+
+    monkeypatch.setattr(CrullerClient, "async_events", from_queue)
+    monkeypatch.setattr("custom_components.cruller.coordinator.RECONNECT_MIN_S", 0)
+    monkeypatch.setattr("custom_components.cruller.coordinator.RECONNECT_MAX_S", 0)
+    return queue
+
+
+async def settle(hass: HomeAssistant) -> None:
+    """Let the events listener (a background task, which async_block_till_done skips) take what's queued."""
+    for _ in range(20):
+        await asyncio.sleep(0)
+    await hass.async_block_till_done()
 
 
 def mock_cruller(

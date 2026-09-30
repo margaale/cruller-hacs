@@ -3,11 +3,15 @@
 A custom [Home Assistant](https://www.home-assistant.io/) integration for
 **[Cruller](https://github.com/margaale/Cruller)**, the Pico 2 W that plugs into a
 RetroTINK 4K's USB-C port and puts it on your network. Use it to power the RetroTINK
-on and off, press its remote's buttons from automations, and react to what's on
-screen: the SVS switch's active input, when an SVS Bridge reports it.
+on and off, press its remote's buttons and load its profiles from automations, and
+react to its power as it changes.
 
-The integration is **local polling** only: it talks to Cruller over your LAN (its
-`/api/v1`, every 10 s), with no cloud and no MQTT.
+The integration is **local push**: Cruller tells Home Assistant as soon as the
+RetroTINK's power changes (its `/api/v1/events`), over your LAN, with no cloud and no
+MQTT. With a Cruller from before events (0.4.2), it polls every 10 s instead.
+
+The SVS switch's input isn't here: the [SVS Bridge's integration](https://github.com/margaale/svs-bridge-hacs)
+has it, straight from the bridge.
 
 ## Entities
 
@@ -17,8 +21,6 @@ Once set up, Cruller appears as a single device with:
 | --- | --- | --- |
 | **RetroTINK 4K** | remote | On while the RetroTINK is on (or starting), off in standby. Turn it on or off, and send its remote's buttons (below). Unavailable while the RetroTINK isn't plugged into Cruller. |
 | **RetroTINK power** | sensor | `On`, `Standby` or `Starting`, as Cruller reads it from the RetroTINK. |
-| **Active input** | sensor | The SVS's active input number, once an SVS Bridge reports it (`unknown` while no input is active). |
-| **Active input name** | sensor | That input's name, as the SVS Bridge calls it. |
 | **RetroTINK connected** | binary sensor | Whether the RetroTINK is on Cruller's USB port. |
 | **Firmware** | update | Cruller's running firmware, and whether a newer GitHub release exists. Notify-only; install from Cruller's page. |
 | **Signal strength** | sensor (diagnostic, disabled by default) | Cruller's Wi-Fi RSSI. |
@@ -42,28 +44,47 @@ data:
   delay_secs: 0.3
 ```
 
-### An automation
+### Automations
 
-Power the RetroTINK on when a console comes on screen:
+Load the SVS profile of the switch's input (`/profile/SVS/S3_….rt4` for input 3, with
+"Auto Load SVS" on in the RetroTINK), sending it the same line the switch does. The
+input comes from the [SVS Bridge's integration](https://github.com/margaale/svs-bridge-hacs):
 
 ```yaml
 triggers:
   - trigger: state
-    entity_id: sensor.cruller_active_input
+    entity_id: sensor.svs_bridge_active_input
 conditions:
+  # No input active: the sensor is unknown, and nothing is sent.
   - condition: template
-    value_template: "{{ trigger.to_state.state not in ['unknown', 'unavailable'] }}"
+    value_template: "{{ trigger.to_state.state | int(0) > 0 }}"
 actions:
-  - action: remote.turn_on
+  - action: remote.send_command
     target:
       entity_id: remote.cruller_retrotink_4k
+    data:
+      command: "SVS NEW INPUT={{ trigger.to_state.state | int }}"
+```
+
+Turn the TV on when the RetroTINK comes on:
+
+```yaml
+triggers:
+  - trigger: state
+    entity_id: sensor.cruller_retrotink_power
+    to: "on"
+actions:
+  - action: media_player.turn_on
+    target:
+      entity_id: media_player.tv
 ```
 
 ## Requirements
 
-A Cruller with its versioned API (`/api/v1`), which came after firmware 0.4.1. An
-older one is still discovered, and Home Assistant asks you to update it first: open
-its page, **Cruller** tab, and install the latest release.
+A Cruller with its versioned API (`/api/v1`), which came after firmware 0.4.1; pushed
+updates need one after 0.4.2 (before, the integration polls every 10 s). An older one is
+still discovered, and Home Assistant asks you to update it first: open its page,
+**Cruller** tab, and install the latest release.
 
 ## Installation
 

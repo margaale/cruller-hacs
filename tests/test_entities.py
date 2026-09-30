@@ -42,8 +42,6 @@ async def test_entities(hass: HomeAssistant, aioclient_mock: AiohttpClientMocker
 
     assert value(hass, "remote", "rt4k") == STATE_ON
     assert value(hass, "sensor", "power") == "on"
-    assert value(hass, "sensor", "active_input") == "3"
-    assert value(hass, "sensor", "active_input_name") == "PS2"
     assert value(hass, "binary_sensor", "rt4k_connected") == STATE_ON
     # The signal strength is there, but off until the user turns it on.
     assert hass.states.get(entity(hass, "sensor", "rssi")) is None
@@ -69,21 +67,12 @@ async def test_update_available(hass: HomeAssistant, aioclient_mock: AiohttpClie
     assert update.attributes["release_url"].endswith("/v0.5.0")
 
 
-@pytest.mark.parametrize(
-    ("svs", "active_input", "active_input_name"),
-    [
-        ({"input": 0, "name": ""}, STATE_UNKNOWN, STATE_UNKNOWN),  # no input active
-        ({"input": 2, "name": ""}, "2", STATE_UNKNOWN),  # the port has no name
-        ({"known": False}, STATE_UNKNOWN, STATE_UNKNOWN),  # no SVS Bridge has reported
-    ],
-)
-async def test_svs_input(
-    hass: HomeAssistant, aioclient_mock: AiohttpClientMocker, svs: dict, active_input: str, active_input_name: str
-) -> None:
-    mock_cruller(aioclient_mock, state=state_with(svs=svs))
+async def test_no_svs(hass: HomeAssistant, aioclient_mock: AiohttpClientMocker) -> None:
+    """The SVS comes from the SVS Bridge's own integration: Cruller has no SVS entities."""
+    mock_cruller(aioclient_mock)
     await setup_cruller(hass)
-    assert value(hass, "sensor", "active_input") == active_input
-    assert value(hass, "sensor", "active_input_name") == active_input_name
+    ids = [e.unique_id for e in er.async_entries_for_config_entry(er.async_get(hass), hass.config_entries.async_entries(DOMAIN)[0].entry_id)]
+    assert not [i for i in ids if "input" in i or "svs" in i]
 
 
 @pytest.mark.parametrize(

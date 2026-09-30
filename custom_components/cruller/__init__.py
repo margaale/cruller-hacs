@@ -33,6 +33,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: CrullerConfigEntry) -> b
 
     entry.runtime_data = coordinator
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+    # Pushed updates (/api/v1/events); cancelled when the entry unloads.
+    entry.async_create_background_task(hass, coordinator.async_listen(), f"{entry.title} events")
     return True
 
 

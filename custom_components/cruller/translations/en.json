@@ -40,12 +40,6 @@
           "starting": "Starting"
         }
       },
-      "active_input": {
-        "name": "Active input"
-      },
-      "active_input_name": {
-        "name": "Active input name"
-      },
       "rssi": {
         "name": "Signal strength"
       }

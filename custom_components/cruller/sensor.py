@@ -12,8 +12,13 @@ from homeassistant.components.sensor import (
     SensorEntityDescription,
     SensorStateClass,
 )
-from homeassistant.const import EntityCategory, SIGNAL_STRENGTH_DECIBELS_MILLIWATT
-from homeassistant.core import HomeAssistant
+from homeassistant.const import (
+    EntityCategory,
+    SIGNAL_STRENGTH_DECIBELS_MILLIWATT,
+    UnitOfElectricPotential,
+    UnitOfTemperature,
+)
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from . import CrullerConfigEntry
@@ -29,6 +34,13 @@ class CrullerSensorDescription(SensorEntityDescription):
     """Describes a Cruller sensor and how to read its value from the state."""
 
     value_fn: Callable[[dict[str, Any]], Any]
+    # Whether this Cruller has it: the board's own sensors are only in the state of a board that has
+    # them (the Pico 2 W, firmware 0.4.4+), so they're added once they show up.
+    exists_fn: Callable[[dict[str, Any]], bool] = lambda d: True
+
+
+def _board_sensor(key: str) -> Callable[[dict[str, Any]], bool]:
+    return lambda d: key in d.get("cruller", {})
 
 
 SENSORS: tuple[CrullerSensorDescription, ...] = (
@@ -49,6 +61,41 @@ SENSORS: tuple[CrullerSensorDescription, ...] = (
         entity_registry_enabled_default=False,
         value_fn=lambda d: d.get("cruller", {}).get("rssi"),
     ),
+    # The board's own sensors: its supply (the Pico 2 W's VSYS, USB's 5 V less its input diode, so
+    # ~4.7-4.9 V on a good supply), the lowest read since it started, and its chip's temperature.
+    CrullerSensorDescription(
+        key="supply_voltage",
+        translation_key="supply_voltage",
+        device_class=SensorDeviceClass.VOLTAGE,
+        native_unit_of_measurement=UnitOfElectricPotential.VOLT,
+        state_class=SensorStateClass.MEASUREMENT,
+        entity_category=EntityCategory.DIAGNOSTIC,
+        suggested_display_precision=2,
+        value_fn=lambda d: d.get("cruller", {}).get("supply_v"),
+        exists_fn=_board_sensor("supply_v"),
+    ),
+    CrullerSensorDescription(
+        key="supply_min_voltage",
+        translation_key="supply_min_voltage",
+        device_class=SensorDeviceClass.VOLTAGE,
+        native_unit_of_measurement=UnitOfElectricPotential.VOLT,
+        state_class=SensorStateClass.MEASUREMENT,
+        entity_category=EntityCategory.DIAGNOSTIC,
+        suggested_display_precision=2,
+        value_fn=lambda d: d.get("cruller", {}).get("supply_min_v"),
+        exists_fn=_board_sensor("supply_min_v"),
+    ),
+    CrullerSensorDescription(
+        key="chip_temperature",
+        translation_key="chip_temperature",
+        device_class=SensorDeviceClass.TEMPERATURE,
+        native_unit_of_measurement=UnitOfTemperature.CELSIUS,
+        state_class=SensorStateClass.MEASUREMENT,
+        entity_category=EntityCategory.DIAGNOSTIC,
+        suggested_display_precision=1,
+        value_fn=lambda d: d.get("cruller", {}).get("temperature_c"),
+        exists_fn=_board_sensor("temperature_c"),
+    ),
 )
 
 
@@ -57,9 +104,21 @@ async def async_setup_entry(
     entry: CrullerConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
-    """Set up Cruller's sensors."""
+    """Set up Cruller's sensors: those its state has now, and the others once it has them (a
+    firmware update that brings the board's sensors needs no reload)."""
     coordinator = entry.runtime_data
-    async_add_entities([*(CrullerSensor(coordinator, desc) for desc in SENSORS), UpdatesSensor(coordinator)])
+    async_add_entities([UpdatesSensor(coordinator)])
+    added: set[str] = set()
+
+    @callback
+    def add_new() -> None:
+        new = [desc for desc in SENSORS if desc.key not in added and desc.exists_fn(coordinator.data)]
+        added.update(desc.key for desc in new)
+        if new:
+            async_add_entities(CrullerSensor(coordinator, desc) for desc in new)
+
+    add_new()
+    entry.async_on_unload(coordinator.async_add_listener(add_new))
 
 
 class CrullerSensor(CrullerEntity, SensorEntity):

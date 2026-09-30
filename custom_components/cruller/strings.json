@@ -49,11 +49,23 @@
           "push": "Push",
           "polling": "Polling"
         }
+      },
+      "supply_voltage": {
+        "name": "Supply voltage"
+      },
+      "supply_min_voltage": {
+        "name": "Lowest supply voltage"
+      },
+      "chip_temperature": {
+        "name": "Chip temperature"
       }
     },
     "binary_sensor": {
       "rt4k_connected": {
         "name": "RetroTINK connected"
+      },
+      "usb_power": {
+        "name": "USB power"
       }
     },
     "update": {

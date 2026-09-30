@@ -9,7 +9,7 @@ from pytest_homeassistant_custom_component.test_util.aiohttp import AiohttpClien
 
 from homeassistant.components.remote import ATTR_COMMAND, ATTR_DELAY_SECS, ATTR_NUM_REPEATS
 from homeassistant.config_entries import ConfigEntryState
-from homeassistant.const import ATTR_ENTITY_ID, STATE_OFF, STATE_ON, STATE_UNAVAILABLE, STATE_UNKNOWN
+from homeassistant.const import ATTR_ENTITY_ID, STATE_OFF, STATE_ON, STATE_UNAVAILABLE, STATE_UNKNOWN, EntityCategory
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import device_registry as dr, entity_registry as er
@@ -56,6 +56,56 @@ async def test_entities(hass: HomeAssistant, aioclient_mock: AiohttpClientMocker
     assert device.model == "Cruller (Pico 2 W)"
     assert device.sw_version == "0.4.2"
     assert device.configuration_url == f"http://{HOST}"
+
+
+BOARD_SENSORS = {"supply_v": 4.84, "supply_min_v": 4.71, "usb_power": True, "temperature_c": 31.4}
+BOARD_ENTITIES = [
+    ("sensor", "supply_voltage"), ("sensor", "supply_min_voltage"), ("sensor", "chip_temperature"),
+    ("binary_sensor", "usb_power"),
+]
+
+
+def registered(hass: HomeAssistant, platform: str, key: str) -> er.RegistryEntry | None:
+    entity_id = er.async_get(hass).async_get_entity_id(platform, DOMAIN, f"{BOARD_ID}_{key}")
+    return er.async_get(hass).async_get(entity_id) if entity_id else None
+
+
+async def test_board_sensors(hass: HomeAssistant, aioclient_mock: AiohttpClientMocker) -> None:
+    """A Pico 2 W (0.4.4+): its supply, lowest supply, chip temperature and USB power, as diagnostics
+    on the same device."""
+    mock_cruller(aioclient_mock, state=state_with(cruller=BOARD_SENSORS))
+    await setup_cruller(hass)
+    assert value(hass, "sensor", "supply_voltage") == "4.84"
+    assert value(hass, "sensor", "supply_min_voltage") == "4.71"
+    assert value(hass, "sensor", "chip_temperature") == "31.4"
+    assert value(hass, "binary_sensor", "usb_power") == STATE_ON
+    device = dr.async_get(hass).async_get_device(identifiers={(DOMAIN, BOARD_ID)})
+    for platform, key in BOARD_ENTITIES:
+        reg = registered(hass, platform, key)
+        assert reg.entity_category is EntityCategory.DIAGNOSTIC
+        assert reg.device_id == device.id
+
+
+async def test_no_board_sensors(hass: HomeAssistant, aioclient_mock: AiohttpClientMocker) -> None:
+    """An ESP32-S3, or a Cruller from before 0.4.4: no board sensors at all, not unavailable ones."""
+    mock_cruller(aioclient_mock)
+    await setup_cruller(hass)
+    for platform, key in BOARD_ENTITIES:
+        assert registered(hass, platform, key) is None
+
+
+async def test_board_sensors_appear(hass: HomeAssistant, aioclient_mock: AiohttpClientMocker) -> None:
+    """Cruller updated to a firmware with the board's sensors: they appear with the next state, no
+    reload."""
+    mock_cruller(aioclient_mock)
+    entry = await setup_cruller(hass)
+    assert registered(hass, "sensor", "supply_voltage") is None
+    aioclient_mock.clear_requests()
+    mock_cruller(aioclient_mock, state=state_with(cruller=BOARD_SENSORS))
+    await entry.runtime_data.async_refresh()
+    await hass.async_block_till_done()
+    assert value(hass, "sensor", "supply_voltage") == "4.84"
+    assert value(hass, "binary_sensor", "usb_power") == STATE_ON
 
 
 async def test_update_available(hass: HomeAssistant, aioclient_mock: AiohttpClientMocker) -> None:

@@ -1,8 +1,9 @@
 """The RetroTINK's remote, through Cruller.
 
 Turning it on and off follows the power state Cruller reads from the RetroTINK. Commands are the
-remote's buttons by name ("menu", "up", "power_on"...), or console commands, which have a space
-("remote menu", "pwr on"): Cruller sends them one at a time, in order.
+remote's buttons by name, as hass-RT4K names them ("menu", "diagnostics", "power_on"...: Cruller
+maps them to the RetroTINK's keys), or console commands, which have a space ("remote menu",
+"pwr on"): Cruller sends them one at a time, in order.
 """
 
 from __future__ import annotations

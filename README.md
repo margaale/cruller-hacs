@@ -25,10 +25,13 @@ Once set up, Cruller appears as a single device with:
 
 ### The remote
 
-`remote.send_command` takes the remote's keys by the RetroTINK's names (`menu`, `up`,
-`down`, `left`, `right`, `ok`, `back`, `input`, `output`, `scaler`, `prof1`…), plus
-`power_on` and `power_off`, or RetroTINK console commands, which have a space
-(`remote menu`, `pwr on`). They go out one at a time, in order:
+`remote.send_command` takes the remote's buttons by name, the same names as
+[hass-RT4K](https://github.com/sjftech/hass-RT4K): the RetroTINK's own keys (`menu`, `up`,
+`down`, `left`, `right`, `ok`, `back`, `input`, `prof1`…), their friendlier names
+(`enter`, `diagnostics`, `profile1`, `1080p`, `auto_crop_16_9`…), `power_on` and
+`power_off`. It also takes RetroTINK console commands, which have a space (`remote menu`,
+`pwr on`). They go out one at a time, in order, so automations written for hass-RT4K
+keep working:
 
 ```yaml
 action: remote.send_command

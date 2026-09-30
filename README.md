@@ -23,6 +23,7 @@ Once set up, Cruller appears as a single device with:
 | **RetroTINK power** | sensor | `On`, `Standby` or `Starting`, as Cruller reads it from the RetroTINK. |
 | **RetroTINK connected** | binary sensor | Whether the RetroTINK is on Cruller's USB port. |
 | **Firmware** | update | Cruller's running firmware, and whether a newer GitHub release exists. Notify-only; install from Cruller's page. |
+| **Updates** | sensor (diagnostic) | `Push` while Cruller pushes its state (instant), `Polling` otherwise (every 10 s: a Cruller from before events, or its socket down). |
 | **Signal strength** | sensor (diagnostic, disabled by default) | Cruller's Wi-Fi RSSI. |
 
 ### The remote

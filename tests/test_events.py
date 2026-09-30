@@ -23,6 +23,12 @@ def remote_state(hass: HomeAssistant) -> str:
     return hass.states.get(entity_id).state
 
 
+def updates(hass: HomeAssistant) -> str:
+    """The "Updates" diagnostic sensor: push or polling."""
+    entity_id = er.async_get(hass).async_get_entity_id("sensor", DOMAIN, f"{BOARD_ID}_updates")
+    return hass.states.get(entity_id).state
+
+
 async def test_pushed_state(hass: HomeAssistant, aioclient_mock: AiohttpClientMocker, events: asyncio.Queue) -> None:
     """Each state Cruller pushes updates the entities at once; polling slows to a safety net."""
     mock_cruller(aioclient_mock)
@@ -35,6 +41,7 @@ async def test_pushed_state(hass: HomeAssistant, aioclient_mock: AiohttpClientMo
     await settle(hass)
     assert remote_state(hass) == STATE_OFF
     assert coordinator.update_interval == PUSH_UPDATE_INTERVAL
+    assert updates(hass) == "push"
 
     # A type a later Cruller could send (to sockets that ask for it) changes nothing.
     events.put_nowait({"type": "later", "anything": [1, 2]})
@@ -54,10 +61,12 @@ async def test_socket_breaks_and_reconnects(
     events.put_nowait(HELLO)
     await settle(hass)
     assert coordinator.update_interval == PUSH_UPDATE_INTERVAL
+    assert updates(hass) == "push"  # the hello alone says so, before any state
 
     events.put_nowait(CrullerError("Cruller restarted"))
     await settle(hass)
     assert coordinator.update_interval == UPDATE_INTERVAL
+    assert updates(hass) == "polling"
 
     events.put_nowait(HELLO)
     events.put_nowait({"type": "state", "state": state_with(rt4k={"power": "standby"})})
@@ -89,6 +98,7 @@ async def test_no_events(hass: HomeAssistant, aioclient_mock: AiohttpClientMocke
     await settle(hass)
     assert entry.runtime_data.update_interval == UPDATE_INTERVAL
     assert remote_state(hass) == STATE_ON
+    assert updates(hass) == "polling"
 
 
 async def test_unload_stops_listening(

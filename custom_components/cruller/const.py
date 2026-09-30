@@ -36,3 +36,10 @@ GITHUB_LATEST_RELEASE_URL = f"https://api.github.com/repos/{GITHUB_REPO}/release
 # How often to check GitHub for a newer firmware release (GitHub allows 60
 # unauthenticated calls per hour; this stays well within that).
 LATEST_CHECK_INTERVAL = timedelta(minutes=30)
+
+# The RetroTINK 4K's firmware indexes in RetroTINK's repository, one per channel, for the RetroTINK
+# firmware update entity: "## Version X (date)" headings, each with its changelog. The installed
+# version is compared with the newest of its own channel.
+RT4K_FIRMWARE_RAW = "https://raw.githubusercontent.com/RetroTINK-LLC/firmware/main/"
+RT4K_FIRMWARE_PAGE = "https://github.com/RetroTINK-LLC/firmware/blob/main/"
+RT4K_CHANNELS = {"release": "4k.md", "experimental": "4k-experimental.md"}

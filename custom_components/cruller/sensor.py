@@ -51,6 +51,23 @@ SENSORS: tuple[CrullerSensorDescription, ...] = (
         options=POWER_STATES,
         value_fn=lambda d: p if (p := d.get("rt4k", {}).get("power")) in POWER_STATES else None,
     ),
+    # The RetroTINK's firmware and model, as it last said them (Cruller 0.5.0+ keeps them while it
+    # sleeps). Added once Cruller has seen them: after it has seen the RetroTINK on once.
+    CrullerSensorDescription(
+        key="rt4k_firmware",
+        translation_key="rt4k_firmware",
+        entity_category=EntityCategory.DIAGNOSTIC,
+        value_fn=lambda d: d.get("rt4k", {}).get("firmware"),
+        exists_fn=lambda d: "firmware" in d.get("rt4k", {}),
+    ),
+    CrullerSensorDescription(
+        key="rt4k_model",
+        translation_key="rt4k_model",
+        entity_category=EntityCategory.DIAGNOSTIC,
+        # "RT4K_Pro" -> "RT4K Pro", as Cruller's page shows it.
+        value_fn=lambda d: m.replace("_", " ") if (m := d.get("rt4k", {}).get("model")) else None,
+        exists_fn=lambda d: "model" in d.get("rt4k", {}),
+    ),
     CrullerSensorDescription(
         key="rssi",
         translation_key="rssi",

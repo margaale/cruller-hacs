@@ -23,6 +23,9 @@ Once set up, Cruller appears as a single device with:
 | **RetroTINK power** | sensor | `On`, `Standby` or `Starting`, as Cruller reads it from the RetroTINK. |
 | **RetroTINK connected** | binary sensor | Whether the RetroTINK is on Cruller's USB port. |
 | **Firmware** | update | Cruller's running firmware, and whether a newer GitHub release exists. Notify-only; install from Cruller's page. |
+| **RetroTINK firmware** | update | The RetroTINK's firmware, and whether a newer one is in [RetroTINK's firmware repository](https://github.com/RetroTINK-LLC/firmware), on the same channel as the installed one (Release, or Experimental for an experimental build: its `channel` attribute). Notify-only; install from Cruller's page (RetroTINK tab, Firmware). |
+| **RetroTINK firmware** | sensor (diagnostic) | The RetroTINK's firmware version. |
+| **RetroTINK model** | sensor (diagnostic) | The RetroTINK's model, such as `RT4K Pro`. |
 | **Updates** | sensor (diagnostic) | `Push` while Cruller pushes its state (instant), `Polling` otherwise (every 10 s: a Cruller from before events, or its socket down). |
 | **Signal strength** | sensor (diagnostic, disabled by default) | Cruller's Wi-Fi RSSI. |
 | **Supply voltage** | sensor (diagnostic) | Cruller's supply, in volts: the Pico 2 W's VSYS, USB's 5 V less its input diode, so ~4.7–4.9 V on a good supply. |
@@ -33,6 +36,10 @@ Once set up, Cruller appears as a single device with:
 The last four are the board's own sensors: a Pico 2 W with Cruller 0.4.4 or later. They appear on
 their own once Cruller's state has them (after updating Cruller, no reload needed); an ESP32-S3
 board doesn't have them.
+
+The three RetroTINK firmware entities need Cruller 0.5.0 or later, and appear once Cruller has seen
+the RetroTINK on (it keeps what it heard, so they stay while the RetroTINK sleeps). The integration
+reads RetroTINK's firmware indexes when it checks for a new Cruller release, every 30 minutes.
 
 ### The remote
 

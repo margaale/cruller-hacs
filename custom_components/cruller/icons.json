@@ -14,6 +14,12 @@
         "state": {
           "push": "mdi:access-point"
         }
+      },
+      "rt4k_firmware": {
+        "default": "mdi:chip"
+      },
+      "rt4k_model": {
+        "default": "mdi:television-classic"
       }
     },
     "binary_sensor": {
@@ -23,6 +29,9 @@
     },
     "update": {
       "firmware": {
+        "default": "mdi:chip"
+      },
+      "rt4k_firmware": {
         "default": "mdi:chip"
       }
     }

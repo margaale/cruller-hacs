@@ -117,6 +117,86 @@ async def test_update_available(hass: HomeAssistant, aioclient_mock: AiohttpClie
     assert update.attributes["release_url"].endswith("/v0.5.0")
 
 
+async def test_rt4k_firmware_sensors(hass: HomeAssistant, aioclient_mock: AiohttpClientMocker) -> None:
+    """Cruller 0.5.0+: the RetroTINK's firmware and model, as diagnostics, also while it sleeps."""
+    mock_cruller(aioclient_mock, state=state_with(rt4k={"power": "standby", "firmware": "1.89.0", "model": "RT4K_Pro"}))
+    await setup_cruller(hass)
+    assert value(hass, "sensor", "rt4k_firmware") == "1.89.0"
+    assert value(hass, "sensor", "rt4k_model") == "RT4K Pro"
+    for key in ("rt4k_firmware", "rt4k_model"):
+        assert registered(hass, "sensor", key).entity_category is EntityCategory.DIAGNOSTIC
+
+
+async def test_no_rt4k_firmware(hass: HomeAssistant, aioclient_mock: AiohttpClientMocker) -> None:
+    """A Cruller from before 0.5.0, or one that hasn't seen the RetroTINK on yet: no such entities."""
+    mock_cruller(aioclient_mock)
+    await setup_cruller(hass)
+    assert registered(hass, "sensor", "rt4k_firmware") is None
+    assert registered(hass, "update", "rt4k_firmware_update") is None
+
+
+def rt4k_update(hass: HomeAssistant):
+    return hass.states.get(entity(hass, "update", "rt4k_firmware_update"))
+
+
+@pytest.mark.parametrize(
+    ("installed", "state", "latest", "channel"),
+    [
+        ("1.89.0", STATE_OFF, "1.89.0", "release"),        # the newest release
+        ("1.87.3", STATE_ON, "1.89.0", "release"),         # an older release: the newest release
+        ("1.90.1", STATE_ON, "1.90.2", "experimental"),    # an experimental build: the newest experimental
+        ("1.90.2", STATE_OFF, "1.90.2", "experimental"),
+        ("1.91.0", STATE_OFF, "1.90.2", "experimental"),   # newer than both lists (a beta): not older
+        ("1.80.0", STATE_ON, "1.89.0", "release"),         # in neither list, older: release
+    ],
+)
+async def test_rt4k_update(
+    hass: HomeAssistant, aioclient_mock: AiohttpClientMocker, installed: str, state: str, latest: str, channel: str
+) -> None:
+    """The installed firmware is compared with the newest of its own channel."""
+    mock_cruller(aioclient_mock, state=state_with(rt4k={"firmware": installed}))
+    await setup_cruller(hass)
+    update = rt4k_update(hass)
+    assert update.state == state
+    assert update.attributes["installed_version"] == installed
+    assert update.attributes["latest_version"] == latest
+    assert update.attributes["channel"] == channel
+    assert update.attributes["release_url"].endswith("4k.md" if channel == "release" else "4k-experimental.md")
+    if state == STATE_ON:
+        assert update.attributes["release_summary"] == f"- What's new in {latest}"
+
+
+async def test_rt4k_update_promoted(hass: HomeAssistant, aioclient_mock: AiohttpClientMocker) -> None:
+    """A version in both lists (an experimental build made a release) follows the release channel."""
+    mock_cruller(
+        aioclient_mock, state=state_with(rt4k={"firmware": "1.89.0"}),
+        rt4k_release=("1.89.0",), rt4k_experimental=("1.90.0", "1.89.0"),
+    )
+    await setup_cruller(hass)
+    assert rt4k_update(hass).state == STATE_OFF
+    assert rt4k_update(hass).attributes["channel"] == "release"
+
+
+async def test_rt4k_update_no_index(hass: HomeAssistant, aioclient_mock: AiohttpClientMocker) -> None:
+    """RetroTINK's index can't be read: the installed version, no update shown."""
+    mock_cruller(aioclient_mock, state=state_with(rt4k={"firmware": "1.87.3"}), rt4k_release=(), rt4k_experimental=())
+    await setup_cruller(hass)
+    assert rt4k_update(hass).state == STATE_OFF
+    assert rt4k_update(hass).attributes["latest_version"] == "1.87.3"
+
+
+async def test_rt4k_firmware_appears(hass: HomeAssistant, aioclient_mock: AiohttpClientMocker) -> None:
+    """Cruller sees the RetroTINK on for the first time: its firmware entities appear, no reload."""
+    mock_cruller(aioclient_mock)
+    entry = await setup_cruller(hass)
+    aioclient_mock.clear_requests()
+    mock_cruller(aioclient_mock, state=state_with(rt4k={"firmware": "1.87.3", "model": "RT4K_Pro"}))
+    await entry.runtime_data.async_refresh()
+    await hass.async_block_till_done()
+    assert value(hass, "sensor", "rt4k_firmware") == "1.87.3"
+    assert rt4k_update(hass).state == STATE_ON
+
+
 async def test_no_svs(hass: HomeAssistant, aioclient_mock: AiohttpClientMocker) -> None:
     """The SVS comes from the SVS Bridge's own integration: Cruller has no SVS entities."""
     mock_cruller(aioclient_mock)

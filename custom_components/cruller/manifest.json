@@ -1,0 +1,13 @@
+{
+  "domain": "cruller",
+  "name": "Cruller",
+  "codeowners": ["@margaale"],
+  "config_flow": true,
+  "documentation": "https://github.com/margaale/cruller-hacs",
+  "integration_type": "device",
+  "iot_class": "local_polling",
+  "issue_tracker": "https://github.com/margaale/cruller-hacs/issues",
+  "requirements": [],
+  "version": "0.0.0",
+  "zeroconf": [{ "type": "_rt4k._tcp.local.", "name": "cruller*" }]
+}

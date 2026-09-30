@@ -1,0 +1,7 @@
+{
+  "name": "Cruller",
+  "zip_release": true,
+  "filename": "cruller.zip",
+  "render_readme": true,
+  "homeassistant": "2024.12.0"
+}

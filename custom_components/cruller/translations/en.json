@@ -1,0 +1,64 @@
+{
+  "config": {
+    "flow_title": "{name}",
+    "step": {
+      "user": {
+        "title": "Connect to Cruller",
+        "description": "Enter Cruller's address.",
+        "data": {
+          "host": "Host"
+        },
+        "data_description": {
+          "host": "Hostname or IP address, e.g. cruller.local, cruller-living.local or 192.168.1.57."
+        }
+      },
+      "discovery_confirm": {
+        "title": "Cruller found",
+        "description": "Found {name} at {host}. Add it?"
+      }
+    },
+    "error": {
+      "cannot_connect": "Cannot reach Cruller. Check that it is on and the host is correct.",
+      "unsupported_firmware": "This Cruller's firmware is too old for Home Assistant. Update it from its page (Cruller tab), then try again."
+    },
+    "abort": {
+      "already_configured": "This Cruller is already set up."
+    }
+  },
+  "entity": {
+    "remote": {
+      "rt4k": {
+        "name": "RetroTINK 4K"
+      }
+    },
+    "sensor": {
+      "power": {
+        "name": "RetroTINK power",
+        "state": {
+          "on": "On",
+          "standby": "Standby",
+          "starting": "Starting"
+        }
+      },
+      "active_input": {
+        "name": "Active input"
+      },
+      "active_input_name": {
+        "name": "Active input name"
+      },
+      "rssi": {
+        "name": "Signal strength"
+      }
+    },
+    "binary_sensor": {
+      "rt4k_connected": {
+        "name": "RetroTINK connected"
+      }
+    },
+    "update": {
+      "firmware": {
+        "name": "Firmware"
+      }
+    }
+  }
+}

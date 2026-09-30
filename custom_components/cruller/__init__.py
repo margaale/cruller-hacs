@@ -1,0 +1,41 @@
+"""The Cruller integration: a RetroTINK 4K on the network, through Cruller."""
+
+from __future__ import annotations
+
+from homeassistant.config_entries import ConfigEntry
+from homeassistant.const import Platform
+from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import ConfigEntryError, ConfigEntryNotReady
+from homeassistant.helpers.aiohttp_client import async_get_clientsession
+
+from .api import CrullerClient, CrullerError, CrullerUnsupportedError
+from .const import CONF_HOST
+from .coordinator import CrullerCoordinator
+
+PLATFORMS = [Platform.BINARY_SENSOR, Platform.REMOTE, Platform.SENSOR, Platform.UPDATE]
+
+CrullerConfigEntry = ConfigEntry[CrullerCoordinator]
+
+
+async def async_setup_entry(hass: HomeAssistant, entry: CrullerConfigEntry) -> bool:
+    """Set up Cruller from a config entry."""
+    client = CrullerClient(async_get_clientsession(hass), entry.data[CONF_HOST])
+
+    try:
+        info = await client.async_get_info()
+    except CrullerUnsupportedError as err:
+        raise ConfigEntryError(str(err)) from err
+    except CrullerError as err:
+        raise ConfigEntryNotReady(str(err)) from err
+
+    coordinator = CrullerCoordinator(hass, entry, client, info)
+    await coordinator.async_config_entry_first_refresh()
+
+    entry.runtime_data = coordinator
+    await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+    return True
+
+
+async def async_unload_entry(hass: HomeAssistant, entry: CrullerConfigEntry) -> bool:
+    """Unload a config entry."""
+    return await hass.config_entries.async_unload_platforms(entry, PLATFORMS)

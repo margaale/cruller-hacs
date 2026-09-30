@@ -117,14 +117,129 @@ async def test_update_available(hass: HomeAssistant, aioclient_mock: AiohttpClie
     assert update.attributes["release_url"].endswith("/v0.5.0")
 
 
-async def test_rt4k_firmware_sensors(hass: HomeAssistant, aioclient_mock: AiohttpClientMocker) -> None:
-    """Cruller 0.5.0+: the RetroTINK's firmware and model, as diagnostics, also while it sleeps."""
+async def test_cruller_updated_checks_again(hass: HomeAssistant, aioclient_mock: AiohttpClientMocker) -> None:
+    """Cruller updated to a release published after the last check: its latest version is read again
+    at once, not up to 30 minutes later (it showed "latest 0.4.4" next to "installed 0.5.0")."""
+    mock_cruller(aioclient_mock, latest="v0.4.2")
+    entry = await setup_cruller(hass)
+    aioclient_mock.clear_requests()
+    mock_cruller(aioclient_mock, state=state_with(cruller={"sw_version": "0.5.0"}), latest="v0.5.0")
+    await entry.runtime_data.async_refresh()
+    await hass.async_block_till_done()
+    update = hass.states.get(entity(hass, "update", "firmware_update"))
+    assert update.attributes["installed_version"] == "0.5.0"
+    assert update.attributes["latest_version"] == "0.5.0"
+
+
+async def test_same_version_no_recheck(hass: HomeAssistant, aioclient_mock: AiohttpClientMocker) -> None:
+    """Polls with the same versions don't ask GitHub again within the 30 minutes."""
+    mock_cruller(aioclient_mock)
+    entry = await setup_cruller(hass)
+    aioclient_mock.clear_requests()
+    mock_cruller(aioclient_mock, latest="v0.9.0")
+    await entry.runtime_data.async_refresh()
+    await hass.async_block_till_done()
+    update = hass.states.get(entity(hass, "update", "firmware_update"))
+    assert update.attributes["latest_version"] == "0.4.1"  # what GitHub said at setup
+
+
+async def test_rt4k_updated_checks_again(hass: HomeAssistant, aioclient_mock: AiohttpClientMocker) -> None:
+    """The RetroTINK updated to a version published after the last check: the index is read again."""
+    mock_cruller(aioclient_mock, state=state_with(rt4k={"firmware": "1.90.1"}))
+    entry = await setup_cruller(hass)
+    aioclient_mock.clear_requests()
+    mock_cruller(aioclient_mock, state=state_with(rt4k={"firmware": "1.90.3"}), rt4k_experimental=("1.90.3", "1.90.2"))
+    await entry.runtime_data.async_refresh()
+    await hass.async_block_till_done()
+    update = rt4k_update(hass)
+    assert update.attributes["latest_version"] == "1.90.3"
+    assert update.attributes["channel"] == "experimental"
+
+
+RT4K_ENTITIES = [("remote", "rt4k"), ("sensor", "power"), ("sensor", "rt4k_firmware"), ("update", "rt4k_firmware_update")]
+CRULLER_ENTITIES = [("binary_sensor", "rt4k_connected"), ("update", "firmware_update"), ("sensor", "updates")]
+
+
+def rt4k_device(hass: HomeAssistant) -> dr.DeviceEntry:
+    return dr.async_get(hass).async_get_device(identifiers={(DOMAIN, f"{BOARD_ID}_rt4k")})
+
+
+async def test_rt4k_device(hass: HomeAssistant, aioclient_mock: AiohttpClientMocker) -> None:
+    """The RetroTINK is its own device, through Cruller's: its model and firmware in its info (Cruller
+    0.5.0+, also while it sleeps), its remote, power and firmware on it."""
     mock_cruller(aioclient_mock, state=state_with(rt4k={"power": "standby", "firmware": "1.89.0", "model": "RT4K_Pro"}))
     await setup_cruller(hass)
+    cruller = dr.async_get(hass).async_get_device(identifiers={(DOMAIN, BOARD_ID)})
+    rt4k = rt4k_device(hass)
+    assert rt4k.name == "RetroTINK 4K Living"  # behind "Cruller Living"
+    assert rt4k.manufacturer == "RetroTINK"
+    assert rt4k.model == "RT4K Pro"
+    assert rt4k.sw_version == "1.89.0"
+    assert rt4k.via_device_id == cruller.id
+    for platform, key in RT4K_ENTITIES:
+        assert registered(hass, platform, key).device_id == rt4k.id, key
+    for platform, key in CRULLER_ENTITIES:
+        assert registered(hass, platform, key).device_id == cruller.id, key
+    # Named after its device: the remote is the device's main entity.
+    assert entity(hass, "remote", "rt4k") == "remote.retrotink_4k_living"
+    assert entity(hass, "sensor", "power") == "sensor.retrotink_4k_living_power"
     assert value(hass, "sensor", "rt4k_firmware") == "1.89.0"
-    assert value(hass, "sensor", "rt4k_model") == "RT4K Pro"
-    for key in ("rt4k_firmware", "rt4k_model"):
-        assert registered(hass, "sensor", key).entity_category is EntityCategory.DIAGNOSTIC
+    assert registered(hass, "sensor", "rt4k_firmware").entity_category is EntityCategory.DIAGNOSTIC
+    # The firmware update is the user's, not a diagnostic (a notify-only update's default).
+    assert registered(hass, "update", "rt4k_firmware_update").entity_category is None
+
+
+async def test_rt4k_device_follows(hass: HomeAssistant, aioclient_mock: AiohttpClientMocker) -> None:
+    """The device's firmware follows an update of the RetroTINK, and its model shows once known."""
+    mock_cruller(aioclient_mock)
+    entry = await setup_cruller(hass)
+    assert rt4k_device(hass).model == "RetroTINK 4K"  # nothing reported yet (before 0.5.0)
+    assert rt4k_device(hass).sw_version is None
+    for firmware in ("1.89.0", "1.91.0"):
+        aioclient_mock.clear_requests()
+        mock_cruller(aioclient_mock, state=state_with(rt4k={"firmware": firmware, "model": "RT4K_CE"}))
+        await entry.runtime_data.async_refresh()
+        await hass.async_block_till_done()
+        assert rt4k_device(hass).sw_version == firmware
+        assert rt4k_device(hass).model == "RT4K CE"
+
+
+async def test_upgrade_keeps_entity_ids(hass: HomeAssistant, aioclient_mock: AiohttpClientMocker) -> None:
+    """From 0.4.0, where they were Cruller's: the RetroTINK's entities move to its device and keep
+    their entity ids (automations and dashboards keep working)."""
+    from pytest_homeassistant_custom_component.common import MockConfigEntry
+
+    from custom_components.cruller.const import CONF_HOST
+
+    entry = MockConfigEntry(domain=DOMAIN, data={CONF_HOST: HOST}, unique_id=BOARD_ID, title="Cruller Living")
+    entry.add_to_hass(hass)
+    cruller = dr.async_get(hass).async_get_or_create(config_entry_id=entry.entry_id, identifiers={(DOMAIN, BOARD_ID)})
+    old = {
+        ("remote", "rt4k"): "remote.cruller_living_retrotink_4k",
+        ("sensor", "power"): "sensor.cruller_living_retrotink_power",
+        ("update", "rt4k_firmware_update"): "update.cruller_living_retrotink_firmware",
+    }
+    for (platform, key), entity_id in old.items():
+        er.async_get(hass).async_get_or_create(
+            platform, DOMAIN, f"{BOARD_ID}_{key}", suggested_object_id=entity_id.split(".")[1],
+            config_entry=entry, device_id=cruller.id,
+        )
+    mock_cruller(aioclient_mock, state=state_with(rt4k={"firmware": "1.89.0", "model": "RT4K_Pro"}))
+    await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+    for (platform, key), entity_id in old.items():
+        assert entity(hass, platform, key) == entity_id
+        assert registered(hass, platform, key).device_id == rt4k_device(hass).id
+    assert hass.states.get("remote.cruller_living_retrotink_4k").state == STATE_ON
+
+
+async def test_model_sensor_removed(hass: HomeAssistant, aioclient_mock: AiohttpClientMocker) -> None:
+    """0.4.0's "RetroTINK model" sensor goes: the model is in the device's info."""
+    er.async_get(hass).async_get_or_create("sensor", DOMAIN, f"{BOARD_ID}_rt4k_model", suggested_object_id="old_model")
+    mock_cruller(aioclient_mock, state=state_with(rt4k={"firmware": "1.89.0", "model": "RT4K_Pro"}))
+    await setup_cruller(hass)
+    assert registered(hass, "sensor", "rt4k_model") is None
+    assert hass.states.get("sensor.old_model") is None
 
 
 async def test_no_rt4k_firmware(hass: HomeAssistant, aioclient_mock: AiohttpClientMocker) -> None:

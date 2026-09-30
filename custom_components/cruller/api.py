@@ -8,6 +8,8 @@ from typing import Any
 
 import aiohttp
 
+from .const import DOMAIN
+
 
 class CrullerError(Exception):
     """A request to Cruller failed."""
@@ -25,6 +27,22 @@ def cruller_name(info: dict[str, Any]) -> str:
     """The name Cruller announces itself with: "Cruller Living", or "Cruller" until it's named."""
     name = info.get("name")
     return f"Cruller {name}" if name else "Cruller"
+
+
+def rt4k_identifier(info: dict[str, Any]) -> tuple[str, str]:
+    """The RetroTINK's device, one per Cruller."""
+    return (DOMAIN, f"{info['id']}_rt4k")
+
+
+def rt4k_name(info: dict[str, Any]) -> str:
+    """"RetroTINK 4K", or "RetroTINK 4K Living" behind a Cruller named Living (so two don't clash)."""
+    name = info.get("name")
+    return f"RetroTINK 4K {name}" if name else "RetroTINK 4K"
+
+
+def rt4k_model(model: str | None) -> str:
+    """The RetroTINK's model as Cruller reports it ("RT4K_Pro"), as its page shows it ("RT4K Pro")."""
+    return model.replace("_", " ") if model else "RetroTINK 4K"
 
 
 class CrullerClient:

@@ -25,7 +25,7 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from . import CrullerConfigEntry
 from .api import CrullerError, CrullerNotConnectedError
-from .entity import CrullerEntity
+from .entity import Rt4kEntity
 
 # Power states that count as on: "starting" is the RetroTINK powering on after "pwr on".
 POWER_ON = ("on", "starting")
@@ -40,10 +40,12 @@ async def async_setup_entry(
     async_add_entities([CrullerRemote(entry.runtime_data)])
 
 
-class CrullerRemote(CrullerEntity, RemoteEntity):
-    """Powers the RetroTINK on and off and presses its remote's buttons."""
+class CrullerRemote(Rt4kEntity, RemoteEntity):
+    """Powers the RetroTINK on and off and presses its remote's buttons: the RetroTINK device's main
+    entity, named after it."""
 
     _attr_translation_key = "rt4k"
+    _attr_name = None
 
     def __init__(self, coordinator) -> None:
         super().__init__(coordinator, "rt4k")

@@ -6,10 +6,11 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryError, ConfigEntryNotReady
+from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .api import CrullerClient, CrullerError, CrullerUnsupportedError
-from .const import CONF_HOST
+from .const import CONF_HOST, DOMAIN
 from .coordinator import CrullerCoordinator
 
 PLATFORMS = [Platform.BINARY_SENSOR, Platform.REMOTE, Platform.SENSOR, Platform.UPDATE]
@@ -32,6 +33,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: CrullerConfigEntry) -> b
     await coordinator.async_config_entry_first_refresh()
 
     entry.runtime_data = coordinator
+    # 0.4.0 had a "RetroTINK model" sensor; the model is in the RetroTINK device's info now.
+    registry = er.async_get(hass)
+    if old := registry.async_get_entity_id("sensor", DOMAIN, f"{info['id']}_rt4k_model"):
+        registry.async_remove(old)
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     # Pushed updates (/api/v1/events); cancelled when the entry unloads.
     entry.async_create_background_task(hass, coordinator.async_listen(), f"{entry.title} events")

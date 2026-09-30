@@ -24,11 +24,6 @@ from .entity import CrullerEntity
 POWER_STATES = ["on", "standby", "starting"]
 
 
-def _active_input(svs: dict[str, Any]) -> dict[str, Any] | None:
-    """The switch's report when an input is active; None before a report, or with input 0."""
-    return svs if svs.get("known") and (svs.get("input") or 0) > 0 else None
-
-
 @dataclass(frozen=True, kw_only=True)
 class CrullerSensorDescription(SensorEntityDescription):
     """Describes a Cruller sensor and how to read its value from the state."""
@@ -43,17 +38,6 @@ SENSORS: tuple[CrullerSensorDescription, ...] = (
         device_class=SensorDeviceClass.ENUM,
         options=POWER_STATES,
         value_fn=lambda d: p if (p := d.get("rt4k", {}).get("power")) in POWER_STATES else None,
-    ),
-    CrullerSensorDescription(
-        key="active_input",
-        translation_key="active_input",
-        # Unknown until the SVS Bridge has reported, and while no input is active (input 0).
-        value_fn=lambda d: (a := _active_input(d.get("svs", {}))) and a["input"],
-    ),
-    CrullerSensorDescription(
-        key="active_input_name",
-        translation_key="active_input_name",
-        value_fn=lambda d: ((a := _active_input(d.get("svs", {}))) and a.get("name")) or None,
     ),
     CrullerSensorDescription(
         key="rssi",

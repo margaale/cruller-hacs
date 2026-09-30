@@ -37,11 +37,6 @@ class CrullerEntity(CoordinatorEntity[CrullerCoordinator]):
         return self.coordinator.data.get("rt4k", {})
 
     @property
-    def _svs(self) -> dict:
-        """The 'svs' block of the latest /api/v1/state payload."""
-        return self.coordinator.data.get("svs", {})
-
-    @property
     def _cruller(self) -> dict:
         """The 'cruller' block of the latest /api/v1/state payload."""
         return self.coordinator.data.get("cruller", {})

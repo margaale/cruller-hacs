@@ -13,10 +13,18 @@ CONF_HOST = "host"
 # theirs in the _rt4k._tcp TXT ("api=1"); a later version keeps v1's routes next to its own.
 API_VERSION = 1
 
-# How often the coordinator polls /api/v1/state. Cruller serves one HTTP request at a time (its
-# page, SD card transfers and firmware uploads share it), so the poll stays light; 10 s is quick
-# enough to follow the RetroTINK's power in automations.
+# How often the coordinator polls /api/v1/state without events (a Cruller from before
+# /api/v1/events, or while its socket is down). Cruller serves one HTTP request at a time (its page,
+# SD card transfers and firmware uploads share it), so the poll stays light; 10 s is quick enough to
+# follow the RetroTINK's power in automations.
 UPDATE_INTERVAL = timedelta(seconds=10)
+
+# While /api/v1/events pushes the state, polling is only a safety net.
+PUSH_UPDATE_INTERVAL = timedelta(seconds=60)
+
+# The events socket: reconnect after this many seconds, doubling up to the most while it keeps failing.
+RECONNECT_MIN_S = 5
+RECONNECT_MAX_S = 60
 
 # The board, by /api/v1/info's "platform", for the device's model.
 BOARDS = {"rp2": "Pico 2 W", "esp32": "ESP32-S3"}

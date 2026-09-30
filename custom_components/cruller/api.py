@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+from collections.abc import AsyncIterator
 from typing import Any
 
 import aiohttp
@@ -30,6 +32,7 @@ class CrullerClient:
 
     def __init__(self, session: aiohttp.ClientSession, host: str) -> None:
         self._session = session
+        self._host = host
         self._base = f"http://{host}"
 
     async def _request(self, method: str, path: str, body: dict[str, Any] | None = None) -> dict[str, Any]:
@@ -66,3 +69,30 @@ class CrullerClient:
     async def async_run(self, command: str) -> dict[str, Any]:
         """Send a console command ("remote menu", "pwr on"...) and get its replies."""
         return await self._request("POST", "/api/v1/command", {"command": command})
+
+    async def async_events(self, types: str = "state") -> AsyncIterator[dict[str, Any]]:
+        """Cruller's events (GET /api/v1/events, a WebSocket): each message as it comes, "hello" first.
+
+        Ends when Cruller closes the socket. Raises CrullerUnsupportedError on a firmware without
+        events (HTTP 404), and CrullerError when the socket can't be opened or breaks.
+        """
+        url = f"ws://{self._host}/api/v1/events?types={types}"
+        try:
+            # Cruller pings every 10 s (aiohttp answers); the heartbeat notices a Cruller that's gone.
+            async with self._session.ws_connect(url, heartbeat=20) as ws:
+                async for msg in ws:
+                    if msg.type is aiohttp.WSMsgType.TEXT:
+                        try:
+                            event = json.loads(msg.data)
+                        except ValueError:
+                            continue
+                        if isinstance(event, dict):
+                            yield event
+                    elif msg.type in (aiohttp.WSMsgType.CLOSED, aiohttp.WSMsgType.ERROR):
+                        break
+        except aiohttp.WSServerHandshakeError as err:
+            if err.status == 404:
+                raise CrullerUnsupportedError("Cruller has no /api/v1/events: update its firmware") from err
+            raise CrullerError(f"Cruller refused the events socket: HTTP {err.status}") from err
+        except (aiohttp.ClientError, TimeoutError) as err:
+            raise CrullerError(f"Cruller's events socket: {err!r}") from err

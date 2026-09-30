@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from datetime import datetime
 from typing import Any
@@ -15,14 +16,23 @@ from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from homeassistant.util import dt as dt_util
 
-from .api import CrullerClient, CrullerError
-from .const import DOMAIN, GITHUB_LATEST_RELEASE_URL, LATEST_CHECK_INTERVAL, UPDATE_INTERVAL
+from .api import CrullerClient, CrullerError, CrullerUnsupportedError
+from .const import (
+    DOMAIN,
+    GITHUB_LATEST_RELEASE_URL,
+    LATEST_CHECK_INTERVAL,
+    PUSH_UPDATE_INTERVAL,
+    RECONNECT_MAX_S,
+    RECONNECT_MIN_S,
+    UPDATE_INTERVAL,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
 
 class CrullerCoordinator(DataUpdateCoordinator[dict[str, Any]]):
-    """Fetches /api/v1/state on a fixed interval and shares it with entities."""
+    """Shares Cruller's /api/v1/state with entities: pushed over /api/v1/events as it changes, polled
+    as a safety net (or every 10 s with a Cruller from before events)."""
 
     def __init__(
         self,
@@ -56,6 +66,35 @@ class CrullerCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._update_device_version(data)
         await self._maybe_check_latest()
         return data
+
+    async def async_listen(self) -> None:
+        """Keep Cruller's events socket open for as long as the entry is loaded.
+
+        While it's open, each state Cruller pushes updates the entities at once and polling slows to a
+        safety net; when it breaks, polling speeds up again until it reconnects. A Cruller from before
+        /api/v1/events is left to polling.
+        """
+        delay = RECONNECT_MIN_S
+        while True:
+            try:
+                async for event in self.client.async_events("state"):
+                    kind = event.get("type")
+                    if kind == "hello":
+                        if "state" in event.get("subscribed", []):
+                            self.update_interval = PUSH_UPDATE_INTERVAL
+                        delay = RECONNECT_MIN_S
+                    elif kind == "state" and isinstance(event.get("state"), dict):
+                        self._update_device_version(event["state"])
+                        self.async_set_updated_data(event["state"])
+                    # Other types (a later Cruller's) only come to sockets that ask for them.
+            except CrullerUnsupportedError:
+                _LOGGER.debug("Cruller has no /api/v1/events (firmware 0.4.2 or older): polling")
+                return
+            except CrullerError as err:
+                _LOGGER.debug("Cruller's events socket: %s", err)
+            self.update_interval = UPDATE_INTERVAL
+            await asyncio.sleep(delay)
+            delay = min(delay * 2, RECONNECT_MAX_S)
 
     @callback
     def async_set_power(self, power: str | None) -> None:

@@ -50,6 +50,22 @@ async def test_pushed_state(hass: HomeAssistant, aioclient_mock: AiohttpClientMo
     assert remote_state(hass) == STATE_ON
 
 
+async def test_pushed_new_version_checks_again(
+    hass: HomeAssistant, aioclient_mock: AiohttpClientMocker, events: asyncio.Queue
+) -> None:
+    """Cruller back from an update pushes its new version: the latest release is read again at once,
+    not at the next poll (a minute away while pushing)."""
+    mock_cruller(aioclient_mock, latest="v0.4.2")
+    await setup_cruller(hass)
+    aioclient_mock.clear_requests()
+    mock_cruller(aioclient_mock, latest="v0.5.0")
+    events.put_nowait(HELLO)
+    events.put_nowait({"type": "state", "state": state_with(cruller={"sw_version": "0.5.0"})})
+    await settle(hass)
+    entity_id = er.async_get(hass).async_get_entity_id("update", DOMAIN, f"{BOARD_ID}_firmware_update")
+    assert hass.states.get(entity_id).attributes["latest_version"] == "0.5.0"
+
+
 async def test_socket_breaks_and_reconnects(
     hass: HomeAssistant, aioclient_mock: AiohttpClientMocker, events: asyncio.Queue
 ) -> None:

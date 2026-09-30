@@ -22,7 +22,7 @@ from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from . import CrullerConfigEntry
-from .entity import CrullerEntity
+from .entity import CrullerEntity, rt4k_device_info
 
 # The RetroTINK's power states (/api/v1/state rt4k.power). "unknown", and any state a later Cruller
 # adds, reads as unknown.
@@ -37,6 +37,8 @@ class CrullerSensorDescription(SensorEntityDescription):
     # Whether this Cruller has it: the board's own sensors are only in the state of a board that has
     # them (the Pico 2 W, firmware 0.4.4+), so they're added once they show up.
     exists_fn: Callable[[dict[str, Any]], bool] = lambda d: True
+    # The RetroTINK's own (its device), not Cruller's.
+    rt4k: bool = False
 
 
 def _board_sensor(key: str) -> Callable[[dict[str, Any]], bool]:
@@ -50,23 +52,18 @@ SENSORS: tuple[CrullerSensorDescription, ...] = (
         device_class=SensorDeviceClass.ENUM,
         options=POWER_STATES,
         value_fn=lambda d: p if (p := d.get("rt4k", {}).get("power")) in POWER_STATES else None,
+        rt4k=True,
     ),
-    # The RetroTINK's firmware and model, as it last said them (Cruller 0.5.0+ keeps them while it
-    # sleeps). Added once Cruller has seen them: after it has seen the RetroTINK on once.
+    # The RetroTINK's firmware, as it last said it (Cruller 0.5.0+ keeps it while it sleeps): also in
+    # its device's info, but a sensor keeps its history (when it changed). Added once Cruller has seen
+    # it: after it has seen the RetroTINK on once. Its model is in the device's info only.
     CrullerSensorDescription(
         key="rt4k_firmware",
         translation_key="rt4k_firmware",
         entity_category=EntityCategory.DIAGNOSTIC,
         value_fn=lambda d: d.get("rt4k", {}).get("firmware"),
         exists_fn=lambda d: "firmware" in d.get("rt4k", {}),
-    ),
-    CrullerSensorDescription(
-        key="rt4k_model",
-        translation_key="rt4k_model",
-        entity_category=EntityCategory.DIAGNOSTIC,
-        # "RT4K_Pro" -> "RT4K Pro", as Cruller's page shows it.
-        value_fn=lambda d: m.replace("_", " ") if (m := d.get("rt4k", {}).get("model")) else None,
-        exists_fn=lambda d: "model" in d.get("rt4k", {}),
+        rt4k=True,
     ),
     CrullerSensorDescription(
         key="rssi",
@@ -146,6 +143,8 @@ class CrullerSensor(CrullerEntity, SensorEntity):
     def __init__(self, coordinator, description: CrullerSensorDescription) -> None:
         super().__init__(coordinator, description.key)
         self.entity_description = description
+        if description.rt4k:
+            self._attr_device_info = rt4k_device_info(coordinator)
 
     @property
     def native_value(self) -> Any:

@@ -16,7 +16,7 @@ from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from homeassistant.util import dt as dt_util
 
-from .api import CrullerClient, CrullerError, CrullerUnsupportedError
+from .api import CrullerClient, CrullerError, CrullerUnsupportedError, rt4k_identifier, rt4k_model
 from .const import (
     DOMAIN,
     GITHUB_LATEST_RELEASE_URL,
@@ -61,6 +61,8 @@ class CrullerCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._latest_checked: datetime | None = None
         self._github = async_get_clientsession(hass)
         self._device_version: str | None = None
+        self._rt4k_firmware: str | None = None
+        self._rt4k_model: str | None = None
         # Whether Cruller pushes the state (/api/v1/events), or it's polled (the "Updates" sensor).
         self.pushing = False
 
@@ -100,6 +102,10 @@ class CrullerCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                     elif kind == "state" and isinstance(event.get("state"), dict):
                         self._update_device_version(event["state"])
                         self.async_set_updated_data(event["state"])
+                        if self._latest_checked is None:  # a version changed: check at once, not at the next poll
+                            self.config_entry.async_create_background_task(
+                                self.hass, self._recheck_latest(), f"{self.name} latest versions"
+                            )
                     # Other types (a later Cruller's) only come to sockets that ask for them.
             except CrullerUnsupportedError:
                 _LOGGER.debug("Cruller has no /api/v1/events (firmware 0.4.2 or older): polling")
@@ -121,14 +127,38 @@ class CrullerCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self.async_set_updated_data({**self.data, "rt4k": {**rt4k, "power": power}})
 
     def _update_device_version(self, data: dict[str, Any]) -> None:
-        """Keep the device's firmware version current as Cruller reports it (it updates itself)."""
+        """Keep the device's firmware version current as Cruller reports it (it updates itself).
+
+        When Cruller's version or the RetroTINK's firmware changes (one was just updated), the latest
+        versions are checked again at once: what was read before may be older than what's installed
+        now (a release published after the last check)."""
+        rt4k = data.get("rt4k", {})
+        rt4k_firmware, rt4k_model_ = rt4k.get("firmware"), rt4k.get("model")
+        if (rt4k_firmware and rt4k_firmware != self._rt4k_firmware) or (rt4k_model_ and rt4k_model_ != self._rt4k_model):
+            if self._rt4k_firmware is not None and rt4k_firmware != self._rt4k_firmware:
+                self._latest_checked = None
+            self._rt4k_firmware = rt4k_firmware or self._rt4k_firmware
+            self._rt4k_model = rt4k_model_ or self._rt4k_model
+            # The RetroTINK's device shows them (entity.py rt4k_device_info set them at first).
+            device = dr.async_get(self.hass).async_get_device(identifiers={rt4k_identifier(self.info)})
+            if device is not None:
+                dr.async_get(self.hass).async_update_device(
+                    device.id, sw_version=self._rt4k_firmware, model=rt4k_model(self._rt4k_model)
+                )
         version = data.get("cruller", {}).get("sw_version")
         if not version or version == self._device_version:
             return
+        if self._device_version is not None:
+            self._latest_checked = None
         self._device_version = version
         device = dr.async_get(self.hass).async_get_device(identifiers={(DOMAIN, self.info["id"])})
         if device is not None:
             dr.async_get(self.hass).async_update_device(device.id, sw_version=version)
+
+    async def _recheck_latest(self) -> None:
+        """Check the latest versions now, and show them."""
+        await self._maybe_check_latest()
+        self.async_update_listeners()
 
     async def _maybe_check_latest(self) -> None:
         """Check GitHub for a newer Cruller release and RetroTINK firmware, at most every 30 minutes."""

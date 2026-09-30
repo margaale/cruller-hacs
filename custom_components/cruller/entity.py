@@ -5,7 +5,7 @@ from __future__ import annotations
 from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .api import cruller_name
+from .api import cruller_name, rt4k_identifier, rt4k_model, rt4k_name
 from .const import BOARDS, CONF_HOST, DOMAIN
 from .coordinator import CrullerCoordinator
 
@@ -40,3 +40,26 @@ class CrullerEntity(CoordinatorEntity[CrullerCoordinator]):
     def _cruller(self) -> dict:
         """The 'cruller' block of the latest /api/v1/state payload."""
         return self.coordinator.data.get("cruller", {})
+
+
+def rt4k_device_info(coordinator: CrullerCoordinator) -> DeviceInfo:
+    """The RetroTINK's own device, connected through Cruller's. Its model and firmware come from
+    Cruller's state (0.5.0+) and follow it (coordinator.py)."""
+    info = coordinator.info
+    rt4k = (coordinator.data or {}).get("rt4k", {})
+    return DeviceInfo(
+        identifiers={rt4k_identifier(info)},
+        name=rt4k_name(info),
+        manufacturer="RetroTINK",
+        model=rt4k_model(rt4k.get("model")),
+        sw_version=rt4k.get("firmware"),
+        via_device=(DOMAIN, info["id"]),
+    )
+
+
+class Rt4kEntity(CrullerEntity):
+    """An entity of the RetroTINK itself, on its device."""
+
+    def __init__(self, coordinator: CrullerCoordinator, key: str) -> None:
+        super().__init__(coordinator, key)
+        self._attr_device_info = rt4k_device_info(coordinator)

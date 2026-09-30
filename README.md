@@ -15,17 +15,25 @@ has it, straight from the bridge.
 
 ## Entities
 
-Once set up, Cruller appears as a single device with:
+Once set up, you get two devices: **Cruller**, and the **RetroTINK 4K** connected through it (named
+after Cruller's: "RetroTINK 4K Living" behind "Cruller Living"). The RetroTINK's device shows its
+model (`RT4K Pro`) and firmware version in its info, once Cruller has reported them.
+
+**RetroTINK 4K:**
 
 | Entity | Type | Notes |
 | --- | --- | --- |
-| **RetroTINK 4K** | remote | On while the RetroTINK is on (or starting), off in standby. Turn it on or off, and send its remote's buttons (below). Unavailable while the RetroTINK isn't plugged into Cruller. |
-| **RetroTINK power** | sensor | `On`, `Standby` or `Starting`, as Cruller reads it from the RetroTINK. |
+| *(the device's name)* | remote | On while the RetroTINK is on (or starting), off in standby. Turn it on or off, and send its remote's buttons (below). Unavailable while the RetroTINK isn't plugged into Cruller. |
+| **Power** | sensor | `On`, `Standby` or `Starting`, as Cruller reads it from the RetroTINK. |
+| **Firmware** | update | The RetroTINK's firmware, and whether a newer one is in [RetroTINK's firmware repository](https://github.com/RetroTINK-LLC/firmware), on the same channel as the installed one (Release, or Experimental for an experimental build: its `channel` attribute). Notify-only; install from Cruller's page (RetroTINK tab, Firmware). |
+| **Firmware version** | sensor (diagnostic) | The RetroTINK's firmware version, with its history (when it changed). |
+
+**Cruller:**
+
+| Entity | Type | Notes |
+| --- | --- | --- |
 | **RetroTINK connected** | binary sensor | Whether the RetroTINK is on Cruller's USB port. |
 | **Firmware** | update | Cruller's running firmware, and whether a newer GitHub release exists. Notify-only; install from Cruller's page. |
-| **RetroTINK firmware** | update | The RetroTINK's firmware, and whether a newer one is in [RetroTINK's firmware repository](https://github.com/RetroTINK-LLC/firmware), on the same channel as the installed one (Release, or Experimental for an experimental build: its `channel` attribute). Notify-only; install from Cruller's page (RetroTINK tab, Firmware). |
-| **RetroTINK firmware** | sensor (diagnostic) | The RetroTINK's firmware version. |
-| **RetroTINK model** | sensor (diagnostic) | The RetroTINK's model, such as `RT4K Pro`. |
 | **Updates** | sensor (diagnostic) | `Push` while Cruller pushes its state (instant), `Polling` otherwise (every 10 s: a Cruller from before events, or its socket down). |
 | **Signal strength** | sensor (diagnostic, disabled by default) | Cruller's Wi-Fi RSSI. |
 | **Supply voltage** | sensor (diagnostic) | Cruller's supply, in volts: the Pico 2 W's VSYS, USB's 5 V less its input diode, so ~4.7–4.9 V on a good supply. |
@@ -37,9 +45,15 @@ The last four are the board's own sensors: a Pico 2 W with Cruller 0.4.4 or late
 their own once Cruller's state has them (after updating Cruller, no reload needed); an ESP32-S3
 board doesn't have them.
 
-The three RetroTINK firmware entities need Cruller 0.5.0 or later, and appear once Cruller has seen
-the RetroTINK on (it keeps what it heard, so they stay while the RetroTINK sleeps). The integration
-reads RetroTINK's firmware indexes when it checks for a new Cruller release, every 30 minutes.
+The RetroTINK's firmware entities need Cruller 0.5.0 or later, and appear once Cruller has seen the
+RetroTINK on (it keeps what it heard, so they stay while the RetroTINK sleeps). The integration
+reads RetroTINK's firmware indexes when it checks for a new Cruller release, every 30 minutes, and
+at once when Cruller's version or the RetroTINK's firmware changes.
+
+Up to 0.4.0 everything was on Cruller's device. Updating moves the RetroTINK's entities to its own
+device and keeps their entity ids (`remote.cruller_retrotink_4k`...), so automations keep working;
+new installs get ids after the RetroTINK's device (`remote.retrotink_4k`), as in the examples below.
+0.4.0's "RetroTINK model" sensor goes: the model is in the device's info.
 
 ### The remote
 
@@ -54,7 +68,7 @@ keep working:
 ```yaml
 action: remote.send_command
 target:
-  entity_id: remote.cruller_retrotink_4k
+  entity_id: remote.retrotink_4k
 data:
   command: [menu, down, ok]
   delay_secs: 0.3
@@ -77,7 +91,7 @@ conditions:
 actions:
   - action: remote.send_command
     target:
-      entity_id: remote.cruller_retrotink_4k
+      entity_id: remote.retrotink_4k
     data:
       command: "SVS NEW INPUT={{ trigger.to_state.state | int }}"
 ```
@@ -87,7 +101,7 @@ Turn the TV on when the RetroTINK comes on:
 ```yaml
 triggers:
   - trigger: state
-    entity_id: sensor.cruller_retrotink_power
+    entity_id: sensor.retrotink_4k_power
     to: "on"
 actions:
   - action: media_player.turn_on

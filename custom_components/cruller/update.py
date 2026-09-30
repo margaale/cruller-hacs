@@ -15,7 +15,7 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from . import CrullerConfigEntry
 from .const import RT4K_CHANNELS, RT4K_FIRMWARE_PAGE
-from .entity import CrullerEntity
+from .entity import CrullerEntity, Rt4kEntity
 from .rt4k_firmware import Rt4kFirmware, channel_of, newest, version_key
 
 # Home Assistant shows at most this much of a release summary.
@@ -78,12 +78,15 @@ class CrullerUpdate(CrullerEntity, UpdateEntity):
         return self.coordinator.latest_release_url
 
 
-class Rt4kFirmwareUpdate(CrullerEntity, UpdateEntity):
+class Rt4kFirmwareUpdate(Rt4kEntity, UpdateEntity):
     """The RetroTINK 4K's firmware, as Cruller last heard it, and the newest in RetroTINK's index of
     the same channel (release or experimental)."""
 
     _attr_translation_key = "rt4k_firmware"
     _attr_device_class = UpdateDeviceClass.FIRMWARE
+    # Home Assistant files a notify-only update entity under diagnostics; the RetroTINK's firmware is
+    # for its user, so it goes with the device's other entities.
+    _attr_entity_category = None
 
     def __init__(self, coordinator) -> None:
         super().__init__(coordinator, "rt4k_firmware_update")

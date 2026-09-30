@@ -25,6 +25,14 @@ Once set up, Cruller appears as a single device with:
 | **Firmware** | update | Cruller's running firmware, and whether a newer GitHub release exists. Notify-only; install from Cruller's page. |
 | **Updates** | sensor (diagnostic) | `Push` while Cruller pushes its state (instant), `Polling` otherwise (every 10 s: a Cruller from before events, or its socket down). |
 | **Signal strength** | sensor (diagnostic, disabled by default) | Cruller's Wi-Fi RSSI. |
+| **Supply voltage** | sensor (diagnostic) | Cruller's supply, in volts: the Pico 2 W's VSYS, USB's 5 V less its input diode, so ~4.7–4.9 V on a good supply. |
+| **Lowest supply voltage** | sensor (diagnostic) | The lowest the supply read since Cruller started. A supply that sags when the RetroTINK draws more (switching inputs) shows here; one that sags too far resets Cruller. |
+| **Chip temperature** | sensor (diagnostic) | Cruller's chip, in °C. |
+| **USB power** | binary sensor (diagnostic) | Whether USB brings Cruller 5 V. |
+
+The last four are the board's own sensors: a Pico 2 W with Cruller 0.4.4 or later. They appear on
+their own once Cruller's state has them (after updating Cruller, no reload needed); an ESP32-S3
+board doesn't have them.
 
 ### The remote
 

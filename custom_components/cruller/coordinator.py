@@ -56,6 +56,8 @@ class CrullerCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._latest_checked: datetime | None = None
         self._github = async_get_clientsession(hass)
         self._device_version: str | None = None
+        # Whether Cruller pushes the state (/api/v1/events), or it's polled (the "Updates" sensor).
+        self.pushing = False
 
     async def _async_update_data(self) -> dict[str, Any]:
         try:
@@ -66,6 +68,14 @@ class CrullerCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._update_device_version(data)
         await self._maybe_check_latest()
         return data
+
+    @callback
+    def _set_pushing(self, pushing: bool) -> None:
+        """Events flowing or not: polling slows to a safety net or speeds up, and "Updates" says so."""
+        self.update_interval = PUSH_UPDATE_INTERVAL if pushing else UPDATE_INTERVAL
+        if pushing != self.pushing:
+            self.pushing = pushing
+            self.async_update_listeners()
 
     async def async_listen(self) -> None:
         """Keep Cruller's events socket open for as long as the entry is loaded.
@@ -80,8 +90,7 @@ class CrullerCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 async for event in self.client.async_events("state"):
                     kind = event.get("type")
                     if kind == "hello":
-                        if "state" in event.get("subscribed", []):
-                            self.update_interval = PUSH_UPDATE_INTERVAL
+                        self._set_pushing("state" in event.get("subscribed", []))
                         delay = RECONNECT_MIN_S
                     elif kind == "state" and isinstance(event.get("state"), dict):
                         self._update_device_version(event["state"])
@@ -92,7 +101,7 @@ class CrullerCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 return
             except CrullerError as err:
                 _LOGGER.debug("Cruller's events socket: %s", err)
-            self.update_interval = UPDATE_INTERVAL
+            self._set_pushing(False)
             await asyncio.sleep(delay)
             delay = min(delay * 2, RECONNECT_MAX_S)
 

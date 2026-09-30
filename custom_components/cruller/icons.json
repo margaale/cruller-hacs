@@ -8,6 +8,12 @@
     "sensor": {
       "power": {
         "default": "mdi:power"
+      },
+      "updates": {
+        "default": "mdi:timer-sync-outline",
+        "state": {
+          "push": "mdi:access-point"
+        }
       }
     },
     "binary_sensor": {

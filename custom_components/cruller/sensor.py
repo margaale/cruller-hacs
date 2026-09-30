@@ -59,7 +59,7 @@ async def async_setup_entry(
 ) -> None:
     """Set up Cruller's sensors."""
     coordinator = entry.runtime_data
-    async_add_entities(CrullerSensor(coordinator, desc) for desc in SENSORS)
+    async_add_entities([*(CrullerSensor(coordinator, desc) for desc in SENSORS), UpdatesSensor(coordinator)])
 
 
 class CrullerSensor(CrullerEntity, SensorEntity):
@@ -74,3 +74,20 @@ class CrullerSensor(CrullerEntity, SensorEntity):
     @property
     def native_value(self) -> Any:
         return self.entity_description.value_fn(self.coordinator.data)
+
+
+class UpdatesSensor(CrullerEntity, SensorEntity):
+    """How the state reaches Home Assistant: "push" while Cruller's /api/v1/events flows,
+    "polling" otherwise (a Cruller from before events, or its socket down)."""
+
+    _attr_translation_key = "updates"
+    _attr_device_class = SensorDeviceClass.ENUM
+    _attr_options = ["push", "polling"]
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+
+    def __init__(self, coordinator) -> None:
+        super().__init__(coordinator, "updates")
+
+    @property
+    def native_value(self) -> str:
+        return "push" if self.coordinator.pushing else "polling"

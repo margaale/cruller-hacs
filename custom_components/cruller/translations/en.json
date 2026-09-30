@@ -40,6 +40,12 @@
           "starting": "Starting"
         }
       },
+      "rt4k_firmware": {
+        "name": "RetroTINK firmware"
+      },
+      "rt4k_model": {
+        "name": "RetroTINK model"
+      },
       "rssi": {
         "name": "Signal strength"
       },
@@ -71,6 +77,9 @@
     "update": {
       "firmware": {
         "name": "Firmware"
+      },
+      "rt4k_firmware": {
+        "name": "RetroTINK firmware"
       }
     }
   }

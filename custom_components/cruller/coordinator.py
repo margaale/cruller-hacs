@@ -24,8 +24,11 @@ from .const import (
     PUSH_UPDATE_INTERVAL,
     RECONNECT_MAX_S,
     RECONNECT_MIN_S,
+    RT4K_CHANNELS,
+    RT4K_FIRMWARE_RAW,
     UPDATE_INTERVAL,
 )
+from .rt4k_firmware import Rt4kFirmware, parse_index
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -53,6 +56,8 @@ class CrullerCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         # Latest firmware release on GitHub (checked occasionally, not every poll).
         self.latest_version: str | None = None
         self.latest_release_url: str | None = None
+        # RetroTINK's firmware indexes, by channel (rt4k_firmware.py), checked as often.
+        self.rt4k_indexes: dict[str, list[Rt4kFirmware]] = {}
         self._latest_checked: datetime | None = None
         self._github = async_get_clientsession(hass)
         self._device_version: str | None = None
@@ -126,11 +131,31 @@ class CrullerCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             dr.async_get(self.hass).async_update_device(device.id, sw_version=version)
 
     async def _maybe_check_latest(self) -> None:
-        """Check GitHub for a newer firmware release, at most every 30 minutes."""
+        """Check GitHub for a newer Cruller release and RetroTINK firmware, at most every 30 minutes."""
         now = dt_util.utcnow()
         if self._latest_checked is not None and now - self._latest_checked < LATEST_CHECK_INTERVAL:
             return
         self._latest_checked = now  # set first, so a failure does not retry in a loop
+        await self._check_rt4k_indexes()
+        await self._check_cruller_latest()
+
+    async def _check_rt4k_indexes(self) -> None:
+        """RetroTINK's firmware indexes, both channels. One that can't be read keeps what it had."""
+        for channel, page in RT4K_CHANNELS.items():
+            try:
+                async with self._github.get(RT4K_FIRMWARE_RAW + page, timeout=aiohttp.ClientTimeout(total=15)) as resp:
+                    if resp.status != 200:
+                        continue
+                    md = await resp.text()
+            except (aiohttp.ClientError, TimeoutError, ValueError):
+                _LOGGER.debug("Could not read RetroTINK's %s firmware index", channel, exc_info=True)
+                continue
+            firmware = parse_index(md)
+            if firmware:
+                self.rt4k_indexes[channel] = firmware
+
+    async def _check_cruller_latest(self) -> None:
+        """The latest Cruller release on GitHub."""
         try:
             async with self._github.get(
                 GITHUB_LATEST_RELEASE_URL,

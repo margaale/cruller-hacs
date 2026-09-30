@@ -14,7 +14,13 @@ from pytest_homeassistant_custom_component.test_util.aiohttp import AiohttpClien
 from homeassistant.core import HomeAssistant
 
 from custom_components.cruller.api import CrullerClient, CrullerUnsupportedError
-from custom_components.cruller.const import CONF_HOST, DOMAIN, GITHUB_LATEST_RELEASE_URL
+from custom_components.cruller.const import (
+    CONF_HOST,
+    DOMAIN,
+    GITHUB_LATEST_RELEASE_URL,
+    RT4K_CHANNELS,
+    RT4K_FIRMWARE_RAW,
+)
 
 pytest_plugins = "pytest_homeassistant_custom_component"
 
@@ -81,19 +87,32 @@ async def settle(hass: HomeAssistant) -> None:
     await hass.async_block_till_done()
 
 
+def rt4k_index(*versions: str) -> str:
+    """A RetroTINK firmware index page (4k.md's format) listing these versions, newest first."""
+    return "# RetroTINK 4K\n\n" + "".join(
+        f"## Version {v} (2026-09-{20 - i:02d})\n\n[Download](https://example.com/{v}.zip)\n\n"
+        f"SHA-256: `{'0' * 64}`\n\n### Changelog:\n- What's new in {v}<br/>\n\n"
+        for i, v in enumerate(versions)
+    )
+
+
 def mock_cruller(
     aioclient_mock: AiohttpClientMocker,
     *,
     state: dict[str, Any] | None = None,
     latest: str = "v0.4.1",
+    rt4k_release: tuple[str, ...] = ("1.89.0", "1.87.3"),
+    rt4k_experimental: tuple[str, ...] = ("1.90.2", "1.90.1"),
 ) -> None:
-    """Register Cruller's GET routes, and GitHub's latest release."""
+    """Register Cruller's GET routes, GitHub's latest release and RetroTINK's firmware indexes."""
     aioclient_mock.get(f"http://{HOST}/api/v1/info", json=INFO)
     aioclient_mock.get(f"http://{HOST}/api/v1/state", json=state or STATE)
     aioclient_mock.get(
         GITHUB_LATEST_RELEASE_URL,
         json={"tag_name": latest, "html_url": f"https://github.com/margaale/Cruller/releases/tag/{latest}"},
     )
+    aioclient_mock.get(RT4K_FIRMWARE_RAW + RT4K_CHANNELS["release"], text=rt4k_index(*rt4k_release))
+    aioclient_mock.get(RT4K_FIRMWARE_RAW + RT4K_CHANNELS["experimental"], text=rt4k_index(*rt4k_experimental))
 
 
 def state_with(**blocks: dict[str, Any]) -> dict[str, Any]:

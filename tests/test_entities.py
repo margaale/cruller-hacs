@@ -204,6 +204,33 @@ async def test_rt4k_device_follows(hass: HomeAssistant, aioclient_mock: AiohttpC
         assert rt4k_device(hass).model == "RT4K CE"
 
 
+async def test_rt4k_profile(hass: HomeAssistant, aioclient_mock: AiohttpClientMocker) -> None:
+    """The profile the RetroTINK has loaded (Cruller 0.6.0+): its name, its path and folder as
+    attributes; "None" for settings that aren't a saved profile; unknown while it isn't on."""
+    mock_cruller(aioclient_mock, state=state_with(rt4k={"profile": "SVS/S2_Genesis.rt4"}))
+    entry = await setup_cruller(hass)
+    assert registered(hass, "sensor", "rt4k_profile").device_id == rt4k_device(hass).id
+    state = hass.states.get(entity(hass, "sensor", "rt4k_profile"))
+    assert state.state == "S2_Genesis"
+    assert state.attributes["path"] == "SVS/S2_Genesis.rt4"
+    assert state.attributes["folder"] == "SVS"
+    for profile, shown in (("Default 4K.RT6", "Default 4K"), ("", "None"), (None, STATE_UNKNOWN)):
+        aioclient_mock.clear_requests()
+        mock_cruller(aioclient_mock, state=state_with(rt4k={"profile": profile}))
+        await entry.runtime_data.async_refresh()
+        await hass.async_block_till_done()
+        state = hass.states.get(entity(hass, "sensor", "rt4k_profile"))
+        assert state.state == shown, profile
+    assert "path" not in state.attributes  # unknown: no attributes
+
+
+async def test_no_rt4k_profile(hass: HomeAssistant, aioclient_mock: AiohttpClientMocker) -> None:
+    """A Cruller from before 0.6.0 doesn't say it: no sensor, not an unknown one."""
+    mock_cruller(aioclient_mock)
+    await setup_cruller(hass)
+    assert registered(hass, "sensor", "rt4k_profile") is None
+
+
 async def test_upgrade_keeps_entity_ids(hass: HomeAssistant, aioclient_mock: AiohttpClientMocker) -> None:
     """From 0.4.0, where they were Cruller's: the RetroTINK's entities move to its device and keep
     their entity ids (automations and dashboards keep working)."""

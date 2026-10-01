@@ -37,12 +37,38 @@ class CrullerSensorDescription(SensorEntityDescription):
     # Whether this Cruller has it: the board's own sensors are only in the state of a board that has
     # them (the Pico 2 W, firmware 0.4.4+), so they're added once they show up.
     exists_fn: Callable[[dict[str, Any]], bool] = lambda d: True
+    # Its attributes, if it has any.
+    attrs_fn: Callable[[dict[str, Any]], dict[str, Any] | None] = lambda d: None
     # The RetroTINK's own (its device), not Cruller's.
     rt4k: bool = False
 
 
 def _board_sensor(key: str) -> Callable[[dict[str, Any]], bool]:
     return lambda d: key in d.get("cruller", {})
+
+
+# The profile the RetroTINK has loaded: rt4k.profile, its path under /profile ("SVS/S2_Genesis.rt4"),
+# "" for none, null while it isn't on.
+def _profile(d: dict[str, Any]) -> str | None:
+    p = d.get("rt4k", {}).get("profile")
+    return p if isinstance(p, str) else None
+
+
+def _profile_name(d: dict[str, Any]) -> str | None:
+    p = _profile(d)
+    if p is None:
+        return None
+    if not p:
+        return "None"  # settings that aren't a saved profile, as the page says it
+    name = p.rsplit("/", 1)[-1]
+    return name[:-4] if name.lower().endswith((".rt4", ".rt6")) else name
+
+
+def _profile_attrs(d: dict[str, Any]) -> dict[str, Any] | None:
+    p = _profile(d)
+    if not p:
+        return None
+    return {"path": p, "folder": p.rsplit("/", 1)[0] if "/" in p else ""}
 
 
 SENSORS: tuple[CrullerSensorDescription, ...] = (
@@ -63,6 +89,17 @@ SENSORS: tuple[CrullerSensorDescription, ...] = (
         entity_category=EntityCategory.DIAGNOSTIC,
         value_fn=lambda d: d.get("rt4k", {}).get("firmware"),
         exists_fn=lambda d: "firmware" in d.get("rt4k", {}),
+        rt4k=True,
+    ),
+    # The profile the RetroTINK has loaded (Cruller 0.6.0+ asks it every 10 s while it's on, and soon
+    # after an SVS input change): its name, "None" for settings that aren't a saved profile, unknown
+    # while it isn't on; its path and folder under /profile as attributes. Added once Cruller has it.
+    CrullerSensorDescription(
+        key="rt4k_profile",
+        translation_key="rt4k_profile",
+        value_fn=_profile_name,
+        attrs_fn=_profile_attrs,
+        exists_fn=lambda d: "profile" in d.get("rt4k", {}),
         rt4k=True,
     ),
     CrullerSensorDescription(
@@ -149,6 +186,10 @@ class CrullerSensor(CrullerEntity, SensorEntity):
     @property
     def native_value(self) -> Any:
         return self.entity_description.value_fn(self.coordinator.data)
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any] | None:
+        return self.entity_description.attrs_fn(self.coordinator.data)
 
 
 class UpdatesSensor(CrullerEntity, SensorEntity):

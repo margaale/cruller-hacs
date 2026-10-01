@@ -19,12 +19,12 @@ jobs:
           fetch-depth: 0  # GitVersion needs the full history
 
       - name: Install GitVersion
-        uses: gittools/actions/gitversion/setup@v3
+        uses: gittools/actions/gitversion/setup@v4
         with:
           versionSpec: '6.x'
       - name: Determine version
         id: gitversion
-        uses: gittools/actions/gitversion/execute@v3
+        uses: gittools/actions/gitversion/execute@v4
 
       # HACS installs from this zip (hacs.json: zip_release), so the version
       # written into the bundled manifest is what users get — no manual bump.
@@ -43,7 +43,7 @@ jobs:
           zip -r "$GITHUB_WORKSPACE/cruller.zip" .
 
       - name: Publish release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           tag_name: v${{ steps.gitversion.outputs.majorMinorPatch }}
           name: v${{ steps.gitversion.outputs.majorMinorPatch }}

@@ -126,6 +126,10 @@ class CrullerCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             return
         self.async_set_updated_data({**self.data, "rt4k": {**rt4k, "power": power}})
 
+    def _device(self, identifier: tuple[str, str]) -> dr.DeviceEntry | None:
+        """One of this entry's devices, by identifier (identifiers are unique per config entry only)."""
+        return dr.async_get(self.hass).async_get_device_by_identifier(identifier, self.config_entry.entry_id)
+
     def _update_device_version(self, data: dict[str, Any]) -> None:
         """Keep the device's firmware version current as Cruller reports it (it updates itself).
 
@@ -140,7 +144,7 @@ class CrullerCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             self._rt4k_firmware = rt4k_firmware or self._rt4k_firmware
             self._rt4k_model = rt4k_model_ or self._rt4k_model
             # The RetroTINK's device shows them (entity.py rt4k_device_info set them at first).
-            device = dr.async_get(self.hass).async_get_device(identifiers={rt4k_identifier(self.info)})
+            device = self._device(rt4k_identifier(self.info))
             if device is not None:
                 dr.async_get(self.hass).async_update_device(
                     device.id, sw_version=self._rt4k_firmware, model=rt4k_model(self._rt4k_model)
@@ -151,7 +155,7 @@ class CrullerCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         if self._device_version is not None:
             self._latest_checked = None
         self._device_version = version
-        device = dr.async_get(self.hass).async_get_device(identifiers={(DOMAIN, self.info["id"])})
+        device = self._device((DOMAIN, self.info["id"]))
         if device is not None:
             dr.async_get(self.hass).async_update_device(device.id, sw_version=version)
 

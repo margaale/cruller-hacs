@@ -25,6 +25,7 @@ model (`RT4K Pro`) and firmware version in its info, once Cruller has reported t
 | --- | --- | --- |
 | *(the device's name)* | remote | On while the RetroTINK is on (or starting), off in standby. Turn it on or off, and send its remote's buttons (below). Unavailable while the RetroTINK isn't plugged into Cruller. |
 | **Power** | sensor | `On`, `Standby` or `Starting`, as Cruller reads it from the RetroTINK. |
+| **Profile** | sensor | The profile the RetroTINK has loaded, by name (`S2_Genesis`), with its `path` and `folder` under `/profile` as attributes; `None` for settings that aren't a saved profile, unknown while it isn't on. Cruller asks every 10 s, and 3 s after the SVS switches inputs. Needs Cruller 0.6.0. |
 | **Firmware** | update | The RetroTINK's firmware, and whether a newer one is in [RetroTINK's firmware repository](https://github.com/RetroTINK-LLC/firmware), on the same channel as the installed one (Release, or Experimental for an experimental build: its `channel` attribute). Notify-only; install from Cruller's page (RetroTINK tab, Firmware). |
 | **Firmware version** | sensor (diagnostic) | The RetroTINK's firmware version, with its history (when it changed). |
 

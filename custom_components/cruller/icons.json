@@ -17,6 +17,9 @@
       },
       "rt4k_firmware": {
         "default": "mdi:chip"
+      },
+      "rt4k_profile": {
+        "default": "mdi:tune-variant"
       }
     },
     "binary_sensor": {

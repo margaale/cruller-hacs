@@ -43,6 +43,17 @@
       "rt4k_firmware": {
         "name": "Firmware version"
       },
+      "rt4k_profile": {
+        "name": "Profile",
+        "state_attributes": {
+          "path": {
+            "name": "Path"
+          },
+          "folder": {
+            "name": "Folder"
+          }
+        }
+      },
       "rssi": {
         "name": "Signal strength"
       },

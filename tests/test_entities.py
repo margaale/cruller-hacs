@@ -170,7 +170,9 @@ def rt4k_device(hass: HomeAssistant) -> dr.DeviceEntry:
     return device_of(hass, f"{BOARD_ID}_rt4k")
 
 
-async def test_rt4k_device(hass: HomeAssistant, aioclient_mock: AiohttpClientMocker) -> None:
+async def test_rt4k_device(
+    hass: HomeAssistant, aioclient_mock: AiohttpClientMocker, caplog: pytest.LogCaptureFixture
+) -> None:
     """The RetroTINK is its own device, through Cruller's: its model and firmware in its info (Cruller
     0.5.0+, also while it sleeps), its remote, power and firmware on it."""
     mock_cruller(aioclient_mock, state=state_with(rt4k={"power": "standby", "firmware": "1.89.0", "model": "RT4K_Pro"}))
@@ -182,6 +184,7 @@ async def test_rt4k_device(hass: HomeAssistant, aioclient_mock: AiohttpClientMoc
     assert rt4k.model == "RT4K Pro"
     assert rt4k.sw_version == "1.89.0"
     assert rt4k.via_device_id == cruller.id
+    assert "via_device" not in caplog.text  # Home Assistant warns about the deprecated via_device
     for platform, key in RT4K_ENTITIES:
         assert registered(hass, platform, key).device_id == rt4k.id, key
     for platform, key in CRULLER_ENTITIES:

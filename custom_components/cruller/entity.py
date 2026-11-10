@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
@@ -20,16 +21,7 @@ class CrullerEntity(CoordinatorEntity[CrullerCoordinator]):
         info = coordinator.info
         device_id = info["id"]
         self._attr_unique_id = f"{device_id}_{key}"
-        host = coordinator.config_entry.data[CONF_HOST]
-        board = BOARDS.get(info.get("platform", ""))
-        self._attr_device_info = DeviceInfo(
-            identifiers={(DOMAIN, device_id)},
-            name=cruller_name(info),
-            manufacturer="Cruller",
-            model=f"Cruller ({board})" if board else "Cruller",
-            sw_version=info.get("sw_version"),
-            configuration_url=f"http://{host}",
-        )
+        self._attr_device_info = cruller_device_info(coordinator)
 
     @property
     def _rt4k(self) -> dict:
@@ -40,6 +32,21 @@ class CrullerEntity(CoordinatorEntity[CrullerCoordinator]):
     def _cruller(self) -> dict:
         """The 'cruller' block of the latest /api/v1/state payload."""
         return self.coordinator.data.get("cruller", {})
+
+
+def cruller_device_info(coordinator: CrullerCoordinator) -> DeviceInfo:
+    """Cruller's own device."""
+    info = coordinator.info
+    host = coordinator.config_entry.data[CONF_HOST]
+    board = BOARDS.get(info.get("platform", ""))
+    return DeviceInfo(
+        identifiers={(DOMAIN, info["id"])},
+        name=cruller_name(info),
+        manufacturer="Cruller",
+        model=f"Cruller ({board})" if board else "Cruller",
+        sw_version=info.get("sw_version"),
+        configuration_url=f"http://{host}",
+    )
 
 
 def rt4k_device_info(coordinator: CrullerCoordinator) -> DeviceInfo:
@@ -53,7 +60,10 @@ def rt4k_device_info(coordinator: CrullerCoordinator) -> DeviceInfo:
         manufacturer="RetroTINK",
         model=rt4k_model(rt4k.get("model")),
         sw_version=rt4k.get("firmware"),
-        via_device=(DOMAIN, info["id"]),
+        # Cruller's device is registered before the platforms are set up (__init__.py).
+        via_device_id=dr.async_get_device_id_by_identifier(
+            coordinator.hass, (DOMAIN, info["id"]), config_entry_id=coordinator.config_entry.entry_id
+        ),
     )
 
 

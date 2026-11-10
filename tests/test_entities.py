@@ -21,6 +21,12 @@ from .conftest import BOARD_ID, HOST, mock_cruller, setup_cruller, state_with
 COMMAND_URL = f"http://{HOST}/api/v1/command"
 
 
+def device_of(hass: HomeAssistant, identifier: str) -> dr.DeviceEntry | None:
+    """A device of the (only) Cruller entry, by its identifier: the registry's lookups are per config entry."""
+    (entry,) = hass.config_entries.async_entries(DOMAIN)
+    return dr.async_get(hass).async_get_device_by_identifier((DOMAIN, identifier), entry.entry_id)
+
+
 def entity(hass: HomeAssistant, platform: str, key: str) -> str:
     entity_id = er.async_get(hass).async_get_entity_id(platform, DOMAIN, f"{BOARD_ID}_{key}")
     assert entity_id, f"no {platform} {key}"
@@ -51,7 +57,7 @@ async def test_entities(hass: HomeAssistant, aioclient_mock: AiohttpClientMocker
     assert update.state == STATE_OFF
     assert update.attributes["installed_version"] == "0.4.2"
 
-    device = dr.async_get(hass).async_get_device(identifiers={(DOMAIN, BOARD_ID)})
+    device = device_of(hass, BOARD_ID)
     assert device.name == "Cruller Living"
     assert device.model == "Cruller (Pico 2 W)"
     assert device.sw_version == "0.4.2"
@@ -79,7 +85,7 @@ async def test_board_sensors(hass: HomeAssistant, aioclient_mock: AiohttpClientM
     assert value(hass, "sensor", "supply_min_voltage") == "4.71"
     assert value(hass, "sensor", "chip_temperature") == "31.4"
     assert value(hass, "binary_sensor", "usb_power") == STATE_ON
-    device = dr.async_get(hass).async_get_device(identifiers={(DOMAIN, BOARD_ID)})
+    device = device_of(hass, BOARD_ID)
     for platform, key in BOARD_ENTITIES:
         reg = registered(hass, platform, key)
         assert reg.entity_category is EntityCategory.DIAGNOSTIC
@@ -161,21 +167,24 @@ CRULLER_ENTITIES = [("binary_sensor", "rt4k_connected"), ("update", "firmware_up
 
 
 def rt4k_device(hass: HomeAssistant) -> dr.DeviceEntry:
-    return dr.async_get(hass).async_get_device(identifiers={(DOMAIN, f"{BOARD_ID}_rt4k")})
+    return device_of(hass, f"{BOARD_ID}_rt4k")
 
 
-async def test_rt4k_device(hass: HomeAssistant, aioclient_mock: AiohttpClientMocker) -> None:
+async def test_rt4k_device(
+    hass: HomeAssistant, aioclient_mock: AiohttpClientMocker, caplog: pytest.LogCaptureFixture
+) -> None:
     """The RetroTINK is its own device, through Cruller's: its model and firmware in its info (Cruller
     0.5.0+, also while it sleeps), its remote, power and firmware on it."""
     mock_cruller(aioclient_mock, state=state_with(rt4k={"power": "standby", "firmware": "1.89.0", "model": "RT4K_Pro"}))
     await setup_cruller(hass)
-    cruller = dr.async_get(hass).async_get_device(identifiers={(DOMAIN, BOARD_ID)})
+    cruller = device_of(hass, BOARD_ID)
     rt4k = rt4k_device(hass)
     assert rt4k.name == "RetroTINK 4K Living"  # behind "Cruller Living"
     assert rt4k.manufacturer == "RetroTINK"
     assert rt4k.model == "RT4K Pro"
     assert rt4k.sw_version == "1.89.0"
     assert rt4k.via_device_id == cruller.id
+    assert "via_device" not in caplog.text  # Home Assistant warns about the deprecated via_device
     for platform, key in RT4K_ENTITIES:
         assert registered(hass, platform, key).device_id == rt4k.id, key
     for platform, key in CRULLER_ENTITIES:
@@ -439,3 +448,23 @@ async def test_unload(hass: HomeAssistant, aioclient_mock: AiohttpClientMocker) 
     entry = await setup_cruller(hass)
     assert await hass.config_entries.async_unload(entry.entry_id)
     assert entry.state is ConfigEntryState.NOT_LOADED
+
+
+async def test_device_lookups_are_not_deprecated(
+    hass: HomeAssistant, aioclient_mock: AiohttpClientMocker, caplog: pytest.LogCaptureFixture
+) -> None:
+    """Following a new Cruller version and a new RetroTINK firmware onto the devices looks them up by
+    identifier and config entry: Home Assistant warns about device_registry.async_get_device (its
+    identifiers are no longer unique across config entries), and it still works as they are updated."""
+    mock_cruller(aioclient_mock)
+    entry = await setup_cruller(hass)
+    aioclient_mock.clear_requests()
+    mock_cruller(
+        aioclient_mock,
+        state=state_with(cruller={"sw_version": "0.5.0"}, rt4k={"firmware": "1.89.0", "model": "RT4K_Pro"}),
+    )
+    await entry.runtime_data.async_refresh()
+    await hass.async_block_till_done()
+    assert device_of(hass, BOARD_ID).sw_version == "0.5.0"
+    assert device_of(hass, f"{BOARD_ID}_rt4k").sw_version == "1.89.0"
+    assert "async_get_device`" not in caplog.text
